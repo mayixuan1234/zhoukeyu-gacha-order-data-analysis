@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抽抽乐订单数据分析（待优化）</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        .header { text-align: center; color: white; margin-bottom: 30px; }
+        .header h1 { font-size: 28px; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
+        .header p { font-size: 14px; opacity: 0.9; }
+        
+        .upload-section { background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center; }
+        .upload-box { border: 2px dashed #ddd; border-radius: 12px; padding: 40px; transition: all 0.3s; cursor: pointer; }
+        .upload-box:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-box.active { border-color: #667eea; background: #eef2ff; }
+        .upload-box div:first-child { font-size: 48px; color: #667eea; margin-bottom: 15px; }
+        .upload-box h3 { font-size: 18px; color: #333; margin-bottom: 8px; }
+        .upload-box p { font-size: 14px; color: #999; }
+        #fileInput { display: none; }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; border: none; padding: 12px 30px; border-radius: 8px;
+            font-size: 16px; cursor: pointer; transition: transform 0.2s; margin-top: 20px;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-sm { padding: 6px 15px; font-size: 13px; margin-top: 0; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 5px 20px rgba(0,0,0,0.08); }
+        .stat-card .value { font-size: 28px; font-weight: bold; color: #667eea; margin-bottom: 5px; }
+        .stat-card .label { font-size: 14px; color: #999; }
+        
+        .charts-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px; }
+        .chart-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.08); }
+        .chart-card h3 { font-size: 16px; color: #333; margin-bottom: 15px; }
+        .chart-container { height: 300px; }
+        
+        .table-section { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .table-header h3 { font-size: 16px; color: #333; }
+        .search-box { padding: 8px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; width: 200px; }
+        
+        .table-wrapper { overflow-x: auto; max-height: 500px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9ff; color: #666; font-weight: 600; position: sticky; top: 0; z-index: 10; }
+        tr:hover { background: #f8f9ff; }
+        
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 5px; margin-top: 15px; flex-wrap: wrap; }
+        .pagination button { padding: 6px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .pagination button:hover { background: #f0f0f0; }
+        .pagination button.active { background: #667eea; color: white; border-color: #667eea; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination span { padding: 0 10px; font-size: 13px; color: #666; }
+        
+        .loading { text-align: center; padding: 40px; color: #667eea; }
+        .loading div:first-child { font-size: 36px; animation: spin 1s linear infinite; display: block; margin-bottom: 10px; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .hidden { display: none; }
+        
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-row { grid-template-columns: 1fr; }
+            .header h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 抽抽乐订单数据分析（待优化）</h1>
+            <p>上传Excel文件，自动生成数据分析报告</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-box" id="uploadBox">
+                <div>📁</div>
+                <h3>点击或拖拽上传Excel文件</h3>
+                <p>支持 .xlsx 和 .xls 格式</p>
+            </div>
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+            <button class="btn" id="analyzeBtn" disabled>开始分析</button>
+            <p id="fileName" style="margin-top: 15px; color: #666;"></p>
+        </div>
+
+        <div id="resultSection" class="hidden">
+            <div class="stats-grid">
+                <div class="stat-card"><div class="value" id="totalUsers">-</div><div class="label">总用户数</div></div>
+                <div class="stat-card"><div class="value" id="totalOrders">-</div><div class="label">总订单数</div></div>
+                <div class="stat-card"><div class="value" id="totalDraws">-</div><div class="label">总抽数</div></div>
+                <div class="stat-card"><div class="value" id="avgDraws">-</div><div class="label">平均抽数</div></div>
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-card"><h3>📊 卡片类型分布</h3><div class="chart-container" id="typePieChart"></div></div>
+                <div class="chart-card"><h3>📈 卡片销量TOP10</h3><div class="chart-container" id="cardBarChart"></div></div>
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-card"><h3>📊 活动期统计</h3><div class="chart-container" id="activityBarChart"></div></div>
+                <div class="chart-card"><h3>📈 个人满赠达标</h3><div class="chart-container" id="milestoneBarChart"></div></div>
+            </div>
+
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>📋 用户数据表格</h3>
+                    <div>
+                        <input type="text" class="search-box" id="searchInput" placeholder="搜索下单账号...">
+                        <button class="btn btn-sm" style="margin-left: 10px;" onclick="exportExcel()">导出Excel</button>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table id="userTable">
+                        <thead>
+                            <tr>
+                                <th>下单账号</th><th>手机号</th><th>订单数</th><th>总抽数</th><th>首次支付时间</th>
+                                <th>满10抽时间</th><th>早期活动奖励</th><th>7.13-7.15抽数</th><th>浪漫疯获得条件</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </div>
+
+        <div id="loadingSection" class="hidden">
+            <div class="loading"><div>⏳</div><p>正在分析数据，请稍候...</p></div>
+        </div>
+    </div>
+
+    <script>
+        const ACTIVITY_START = new Date('2026-07-11T17:20:00');
+        const ACTIVITY_1H_END = new Date(ACTIVITY_START.getTime() + 60 * 60 * 1000);
+        const ACTIVITY_6H_END = new Date(ACTIVITY_START.getTime() + 6 * 60 * 60 * 1000);
+        const ACTIVITY_24H_END = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000);
+        const ROMANCE_START = new Date('2026-07-13T12:00:00');
+        const ROMANCE_END = new Date('2026-07-15T18:00:00');
+
+        let fileData = null, userData = [], cardStats = [], typeStats = [], activityStats = [], milestoneStats = [];
+        let currentPage = 1, pageSize = 20, filteredData = [];
+        let charts = {};
+
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const fileName = document.getElementById('fileName');
+        const resultSection = document.getElementById('resultSection');
+        const loadingSection = document.getElementById('loadingSection');
+
+        uploadBox.addEventListener('click', () => fileInput.click());
+        uploadBox.addEventListener('dragover', (e) => { e.preventDefault(); uploadBox.classList.add('active'); });
+        uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('active'));
+        uploadBox.addEventListener('drop', (e) => { e.preventDefault(); uploadBox.classList.remove('active'); if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]); });
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+
+        function handleFile(file) {
+            fileName.textContent = `已选择：${file.name}`;
+            const reader = new FileReader();
+            reader.onload = (e) => { fileData = new Uint8Array(e.target.result); analyzeBtn.disabled = false; };
+            reader.readAsArrayBuffer(file);
+        }
+
+        analyzeBtn.addEventListener('click', async () => {
+            if (!fileData) return;
+            loadingSection.classList.remove('hidden');
+            resultSection.classList.add('hidden');
+
+            await new Promise(r => setTimeout(r, 300));
+            try {
+                const workbook = XLSX.read(fileData, { type: 'array' });
+                const df = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                processData(df);
+                renderCharts();
+                filteredData = [...userData];
+                renderTable(1);
+                loadingSection.classList.add('hidden');
+                resultSection.classList.remove('hidden');
+                setTimeout(() => { Object.values(charts).forEach(c => c.resize()); }, 100);
+            } catch (error) {
+                alert('解析文件失败：' + error.message);
+                loadingSection.classList.add('hidden');
+            }
+        });
+
+        function processData(df) {
+            const cardData = [], orderData = [];
+
+            df.forEach(row => {
+                const orderNo = row['订单编号'];
+                const wechat = row['下单账号'];
+                const phone = row['收货人/提货人手机号'];
+                const payTimeRaw = row['支付时间'];
+                const orderDesc = row['订单描述'] ? String(row['订单描述']) : '';
+                const giftInfo = row['赠品'] ? String(row['赠品']) : '';
+                const itemCount = row['商品总件数'] || 0;
+
+                let payTime = null;
+                if (payTimeRaw) {
+                    try {
+                        if (payTimeRaw instanceof Date) payTime = payTimeRaw;
+                        else {
+                            const str = String(payTimeRaw);
+                            payTime = str.includes('/') 
+                                ? new Date(...str.split(/[\/\s]/).map((p, i) => i === 1 ? parseInt(p) - 1 : parseInt(p) || 0))
+                                : new Date(str);
+                        }
+                    } catch (e) { payTime = null; }
+                }
+
+                let activityPeriod = '';
+                if (payTime) {
+                    if (payTime >= ACTIVITY_START && payTime < ACTIVITY_1H_END) activityPeriod = '0-1小时';
+                    else if (payTime >= ACTIVITY_1H_END && payTime < ACTIVITY_6H_END) activityPeriod = '1-6小时';
+                    else if (payTime >= ACTIVITY_6H_END && payTime < ACTIVITY_24H_END) activityPeriod = '6-24小时';
+                }
+
+                const isRomancePeriod = payTime && payTime >= ROMANCE_START && payTime <= ROMANCE_END;
+                orderData.push({ orderNo, wechat, phone, payTime, orderDesc, itemCount, activityPeriod, isRomancePeriod });
+
+                if (orderDesc) {
+                    orderDesc.split(';').forEach(item => {
+                        item = item.trim();
+                        if (!item || !item.includes('[购买数量:')) return;
+                        const namePart = item.split('[购买数量:')[0].trim();
+                        const qty = parseInt(item.split('[购买数量:')[1].replace(']', '').trim()) || 1;
+                        if (namePart.includes('盲盒商品')) return;
+
+                        let cardName = namePart
+                            .replace('周柯宇爱意正值炽夏小卡抽抽乐-', '')
+                            .replace('【补邮转链】「周柯宇 fully unlocked」爱意正值炽夏小卡抽抽乐.', '')
+                            .replace('「周柯宇 fully unlocked」爱意正值炽夏小卡抽抽乐-', '')
+                            .replace('爱意正值炽夏小卡抽抽乐-', '');
+                        if (cardName.endsWith('.')) cardName = cardName.slice(0, -1);
+                        if (cardName.includes('.')) cardName = cardName.split('.')[0] || cardName;
+                        if (!cardName) return;
+
+                        for (let i = 0; i < qty; i++) {
+                            cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: cardName.slice(0, 2) || '未知', activityPeriod, isRomancePeriod });
+                        }
+                    });
+                }
+
+                if (giftInfo && giftInfo.includes('奖品')) {
+                    giftInfo.split(';').forEach(gift => {
+                        gift = gift.trim();
+                        if (!gift || !gift.includes('奖品')) return;
+                        const parts = gift.split(':');
+                        if (parts.length < 2) return;
+                        const cardName = parts[1].trim();
+                        if (!cardName) return;
+                        cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: cardName.slice(0, 2) || '未知', activityPeriod, isRomancePeriod });
+                    });
+                }
+            });
+
+            const userMap = new Map();
+            cardData.forEach(card => {
+                if (!userMap.has(card.wechat)) userMap.set(card.wechat, { wechat: card.wechat, phone: card.phone, orders: new Set(), cards: [], payTimes: [], activityDraws: { '0-1小时': 0, '1-6小时': 0, '6-24小时': 0 }, romanceDraws: 0, romanceOrders: 0 });
+                const user = userMap.get(card.wechat);
+                user.orders.add(card.orderNo);
+                user.cards.push(card.cardName);
+                if (card.payTime) user.payTimes.push(card.payTime);
+                if (card.activityPeriod) user.activityDraws[card.activityPeriod]++;
+                if (card.isRomancePeriod) user.romanceDraws++;
+            });
+            orderData.forEach(order => {
+                if (!userMap.has(order.wechat)) userMap.set(order.wechat, { wechat: order.wechat, phone: order.phone, orders: new Set(), cards: [], payTimes: [], activityDraws: { '0-1小时': 0, '1-6小时': 0, '6-24小时': 0 }, romanceDraws: 0, romanceOrders: 0 });
+                const user = userMap.get(order.wechat);
+                user.orders.add(order.orderNo);
+                if (!user.phone && order.phone) user.phone = order.phone;
+                if (order.payTime) user.payTimes.push(order.payTime);
+                if (order.isRomancePeriod) user.romanceOrders++;
+            });
+
+            userData = [];
+            userMap.forEach(user => {
+                const payTimes = user.payTimes.filter(t => t);
+                const firstPayTime = payTimes.length > 0 ? new Date(Math.min(...payTimes.map(t => t.getTime()))) : null;
+                const totalDraws = user.cards.length;
+                
+                const uniqueCards = [...new Set(user.cards)];
+                const cardCounts = {};
+                user.cards.forEach(c => cardCounts[c] = (cardCounts[c] || 0) + 1);
+                const itemList = uniqueCards.map(c => `${c}x${cardCounts[c]}`).join('; ');
+
+                const isFirstTimeBuyer = !firstPayTime || firstPayTime >= ROMANCE_START;
+                const cardsBefore10 = [...user.cards].slice(0, 10);
+
+                let full10Time = null;
+                if (payTimes.length > 0) {
+                    const sortedPayTimes = [...payTimes].sort((a, b) => a.getTime() - b.getTime());
+                    let cumCount = 0;
+                    for (const pt of sortedPayTimes) {
+                        cumCount++;
+                        if (cumCount >= 10) { full10Time = pt; break; }
+                    }
+                }
+
+                let earlyBirdReward = '';
+                if (full10Time) {
+                    if (full10Time >= ACTIVITY_START && full10Time < ACTIVITY_1H_END) earlyBirdReward = '获得小卡1、2、3';
+                    else if (full10Time >= ACTIVITY_1H_END && full10Time < ACTIVITY_6H_END) earlyBirdReward = '获得小卡2、3';
+                    else if (full10Time >= ACTIVITY_6H_END && full10Time < ACTIVITY_24H_END) earlyBirdReward = '获得小卡3';
+                    else earlyBirdReward = '未获得早期小卡';
+                } else earlyBirdReward = '未满10抽';
+
+                let romanceCondition = '';
+                if (isFirstTimeBuyer) {
+                    if (user.romanceDraws >= 20) romanceCondition = '首次下单:20抽得两张';
+                    else if (user.romanceDraws >= 12) romanceCondition = '首次下单:12抽得一张';
+                    else romanceCondition = '首次下单:未达标';
+                } else {
+                    if (user.romanceDraws >= 10) romanceCondition = '非首次下单:10抽得两张';
+                    else if (user.romanceDraws >= 6) romanceCondition = '非首次下单:6抽得一张';
+                    else romanceCondition = '非首次下单:未达标';
+                }
+
+                userData.push({
+                    wechat: user.wechat, phone: user.phone || '', orderCount: user.orders.size,
+                    orderNos: [...user.orders].join(';'), items: itemList || '无', totalDraws,
+                    firstPayTime: firstPayTime ? formatDate(firstPayTime) : '',
+                    full10Time: full10Time ? formatDate(full10Time) : '', earlyBirdReward,
+                    activity0_1h: user.activityDraws['0-1小时'], activity1_6h: user.activityDraws['1-6小时'],
+                    activity6_24h: user.activityDraws['6-24小时'], romanceDraws: user.romanceDraws,
+                    romanceOrders: user.romanceOrders, isFirstTimeBuyer: isFirstTimeBuyer ? '是' : '否',
+                    romanceCardCount: uniqueCards.filter(c => c.includes('浪漫疯')).length, romanceCondition,
+                    cardsBefore10: cardsBefore10.join(';'), cardList: uniqueCards.join(';')
+                });
+            });
+
+            userData.sort((a, b) => b.totalDraws - a.totalDraws);
+
+            const cardCountMap = new Map();
+            cardData.forEach(card => {
+                const key = `${card.cardName}|${card.cardType}`;
+                if (!cardCountMap.has(key)) cardCountMap.set(key, { cardName: card.cardName, cardType: card.cardType, count: 0, users: new Set() });
+                const stat = cardCountMap.get(key); stat.count++; stat.users.add(card.wechat);
+            });
+            cardStats = Array.from(cardCountMap.values()).sort((a, b) => b.count - a.count);
+
+            const typeCountMap = new Map();
+            cardData.forEach(card => {
+                if (!typeCountMap.has(card.cardType)) typeCountMap.set(card.cardType, { cardType: card.cardType, count: 0, cards: new Set(), users: new Set() });
+                const stat = typeCountMap.get(card.cardType); stat.count++; stat.cards.add(card.cardName); stat.users.add(card.wechat);
+            });
+            typeStats = Array.from(typeCountMap.values()).sort((a, b) => b.count - a.count);
+
+            activityStats = [
+                { period: '0-1小时', orders: 0, users: new Set(), draws: 0 },
+                { period: '1-6小时', orders: 0, users: new Set(), draws: 0 },
+                { period: '6-24小时', orders: 0, users: new Set(), draws: 0 },
+                { period: '浪漫疯活动期', orders: 0, users: new Set(), draws: 0 }
+            ];
+            orderData.forEach(order => {
+                let idx = order.activityPeriod === '0-1小时' ? 0 : order.activityPeriod === '1-6小时' ? 1 : order.activityPeriod === '6-24小时' ? 2 : order.isRomancePeriod ? 3 : -1;
+                if (idx >= 0) { activityStats[idx].orders++; activityStats[idx].users.add(order.wechat); activityStats[idx].draws += order.itemCount; }
+            });
+            activityStats.forEach(stat => stat.userCount = stat.users.size);
+
+            const milestones = [10, 20, 30, 40, 50, 66, 88, 100, 120];
+            milestoneStats = milestones.map(m => ({ milestone: m, count: userData.filter(u => u.totalDraws >= m).length, rate: ((userData.filter(u => u.totalDraws >= m).length / userData.length) * 100).toFixed(1) + '%' }));
+
+            document.getElementById('totalUsers').textContent = userData.length.toLocaleString();
+            document.getElementById('totalOrders').textContent = userData.reduce((sum, u) => sum + u.orderCount, 0).toLocaleString();
+            document.getElementById('totalDraws').textContent = userData.reduce((sum, u) => sum + u.totalDraws, 0).toLocaleString();
+            document.getElementById('avgDraws').textContent = (userData.reduce((sum, u) => sum + u.totalDraws, 0) / userData.length).toFixed(1);
+        }
+
+        function formatDate(date) {
+            if (!date) return '';
+            const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, '0'), d = String(date.getDate()).padStart(2, '0');
+            const h = String(date.getHours()).padStart(2, '0'), min = String(date.getMinutes()).padStart(2, '0'), s = String(date.getSeconds()).padStart(2, '0');
+            return `${y}-${m}-${d} ${h}:${min}:${s}`;
+        }
+
+        function renderCharts() {
+            ['typePieChart', 'cardBarChart', 'activityBarChart', 'milestoneBarChart'].forEach(id => {
+                if (charts[id]) { charts[id].dispose(); delete charts[id]; }
+            });
+
+            charts.typePieChart = echarts.init(document.getElementById('typePieChart'));
+            charts.typePieChart.setOption({
+                tooltip: { trigger: 'item' },
+                legend: { orient: 'vertical', right: 10 },
+                series: [{ type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false, itemStyle: { borderRadius: 10 }, label: { show: false }, emphasis: { label: { show: true, fontSize: 16 } }, data: typeStats.map(t => ({ value: t.count, name: t.cardType })) }]
+            });
+
+            charts.cardBarChart = echarts.init(document.getElementById('cardBarChart'));
+            const top10Cards = cardStats.slice(0, 10);
+            charts.cardBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: top10Cards.map(c => c.cardName), axisLabel: { rotate: 45, fontSize: 11 } },
+                yAxis: { type: 'value' },
+                series: [{ type: 'bar', data: top10Cards.map(c => c.count), itemStyle: { borderRadius: [4, 4, 0, 0], color: '#667eea' } }]
+            });
+
+            charts.activityBarChart = echarts.init(document.getElementById('activityBarChart'));
+            charts.activityBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: ['订单数', '参与用户数', '总抽数'] },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: activityStats.map(a => a.period), axisLabel: { fontSize: 11 } },
+                yAxis: { type: 'value' },
+                series: [
+                    { name: '订单数', type: 'bar', data: activityStats.map(a => a.orders), itemStyle: { color: '#667eea' } },
+                    { name: '参与用户数', type: 'bar', data: activityStats.map(a => a.userCount), itemStyle: { color: '#764ba2' } },
+                    { name: '总抽数', type: 'bar', data: activityStats.map(a => a.draws), itemStyle: { color: '#f093fb' } }
+                ]
+            });
+
+            charts.milestoneBarChart = echarts.init(document.getElementById('milestoneBarChart'));
+            charts.milestoneBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: milestoneStats.map(m => `满${m.milestone}抽`), axisLabel: { rotate: 45, fontSize: 11 } },
+                yAxis: { type: 'value' },
+                series: [{ type: 'bar', data: milestoneStats.map(m => m.count), itemStyle: { borderRadius: [4, 4, 0, 0], color: '#667eea' } }]
+            });
+
+            window.addEventListener('resize', () => { Object.values(charts).forEach(c => c.resize()); });
+        }
+
+        function renderTable(page) {
+            currentPage = page;
+            const start = (page - 1) * pageSize;
+            const end = start + pageSize;
+            const pageData = filteredData.slice(start, end);
+
+            const tbody = document.getElementById('userTableBody');
+            tbody.innerHTML = pageData.length > 0 ? pageData.map(user => `
+                <tr>
+                    <td>${user.wechat}</td><td>${user.phone}</td><td>${user.orderCount}</td><td>${user.totalDraws}</td><td>${user.firstPayTime}</td>
+                    <td>${user.full10Time}</td><td>${user.earlyBirdReward}</td><td>${user.romanceDraws}</td><td>${user.romanceCondition}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="9" style="text-align:center;color:#999;">暂无数据</td></tr>';
+
+            const totalPages = Math.ceil(filteredData.length / pageSize);
+            const pagination = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = `<button class="btn-sm" onclick="renderTable(${page - 1})" ${page <= 1 ? 'disabled' : ''}>上一页</button>`;
+            html += `<span>第 ${page} / ${totalPages} 页</span>`;
+            
+            for (let i = 1; i <= totalPages; i++) {
+                if (i <= 3 || (i > page - 2 && i < page + 2) || i >= totalPages - 2) {
+                    html += `<button class="btn-sm ${i === page ? 'active' : ''}" onclick="renderTable(${i})">${i}</button>`;
+                } else if (i === page - 2 || i === page + 2) {
+                    html += `<span>...</span>`;
+                }
+            }
+            
+            html += `<button class="btn-sm" onclick="renderTable(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>下一页</button>`;
+            pagination.innerHTML = html;
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const keyword = e.target.value.toLowerCase();
+            filteredData = keyword ? userData.filter(u => u.wechat.toLowerCase().includes(keyword) || u.phone.includes(keyword)) : [...userData];
+            renderTable(1);
+        });
+
+        function exportExcel() {
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '首次支付时间', '满10抽时间', '早期活动奖励', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯获得条件'];
+            const data = filteredData.map(u => [u.wechat, u.phone, u.orderCount, u.orderNos, u.items, u.totalDraws, u.firstPayTime, u.full10Time, u.earlyBirdReward, u.activity0_1h, u.activity1_6h, u.activity6_24h, u.romanceDraws, u.romanceCondition]);
+            const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, '用户统计');
+            XLSX.writeFile(workbook, '订单分析报告.xlsx');
+        }
+    </script>
+</body>
+</html>
