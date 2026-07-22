@@ -123,7 +123,7 @@
                         <thead>
                             <tr>
                                 <th>下单账号</th><th>手机号</th><th>订单数</th><th>总抽数</th><th>首次支付时间</th>
-                                <th>满10抽时间</th><th>早期活动奖励</th><th>7.13-7.15抽数</th><th>浪漫疯获得条件</th>
+                                <th>满10抽时间</th><th>限时小卡123获得情况</th><th>7.13-7.15抽数</th><th>浪漫疯子限时小卡获得情况</th>
                             </tr>
                         </thead>
                         <tbody id="userTableBody"></tbody>
@@ -307,12 +307,25 @@
                 }
 
                 let earlyBirdReward = '';
+                let limitedCards = '';
                 if (full10Time) {
-                    if (full10Time >= ACTIVITY_START && full10Time < ACTIVITY_1H_END) earlyBirdReward = '获得小卡1、2、3';
-                    else if (full10Time >= ACTIVITY_1H_END && full10Time < ACTIVITY_6H_END) earlyBirdReward = '获得小卡2、3';
-                    else if (full10Time >= ACTIVITY_6H_END && full10Time < ACTIVITY_24H_END) earlyBirdReward = '获得小卡3';
-                    else earlyBirdReward = '未获得早期小卡';
-                } else earlyBirdReward = '未满10抽';
+                    if (full10Time >= ACTIVITY_START && full10Time < ACTIVITY_1H_END) {
+                        earlyBirdReward = '获得早期奖励';
+                        limitedCards = '小卡1、小卡2、小卡3';
+                    } else if (full10Time >= ACTIVITY_1H_END && full10Time < ACTIVITY_6H_END) {
+                        earlyBirdReward = '获得早期奖励';
+                        limitedCards = '小卡2、小卡3';
+                    } else if (full10Time >= ACTIVITY_6H_END && full10Time < ACTIVITY_24H_END) {
+                        earlyBirdReward = '获得早期奖励';
+                        limitedCards = '小卡3';
+                    } else {
+                        earlyBirdReward = '未获得早期奖励';
+                        limitedCards = '无';
+                    }
+                } else {
+                    earlyBirdReward = '未满10抽';
+                    limitedCards = '未满10抽';
+                }
 
                 let romanceCondition = '';
                 if (isFirstTimeBuyer) {
@@ -330,10 +343,11 @@
                     orderNos: [...user.orders].join(';'), items: itemList || '无', totalDraws,
                     firstPayTime: firstPayTime ? formatDate(firstPayTime) : '',
                     full10Time: full10Time ? formatDate(full10Time) : '', earlyBirdReward,
+                    limitedCards,
                     activity0_1h: user.activityDraws['0-1小时'], activity1_6h: user.activityDraws['1-6小时'],
                     activity6_24h: user.activityDraws['6-24小时'], romanceDraws: user.romanceDraws,
                     romanceOrders: user.romanceOrders, isFirstTimeBuyer: isFirstTimeBuyer ? '是' : '否',
-                    romanceCardCount: uniqueCards.filter(c => c.includes('浪漫疯')).length, romanceCondition,
+                    romanceCardCount: uniqueCards.filter(c => c.includes('浪漫疯子')).length, romanceCondition,
                     cardsBefore10: cardsBefore10.join(';'), cardList: uniqueCards.join(';')
                 });
             });
@@ -359,7 +373,7 @@
                 { period: '0-1小时', orders: 0, users: new Set(), draws: 0 },
                 { period: '1-6小时', orders: 0, users: new Set(), draws: 0 },
                 { period: '6-24小时', orders: 0, users: new Set(), draws: 0 },
-                { period: '浪漫疯活动期', orders: 0, users: new Set(), draws: 0 }
+                { period: '浪漫疯子活动期', orders: 0, users: new Set(), draws: 0 }
             ];
             orderData.forEach(order => {
                 let idx = order.activityPeriod === '0-1小时' ? 0 : order.activityPeriod === '1-6小时' ? 1 : order.activityPeriod === '6-24小时' ? 2 : order.isRomancePeriod ? 3 : -1;
@@ -441,7 +455,7 @@
             tbody.innerHTML = pageData.length > 0 ? pageData.map(user => `
                 <tr>
                     <td>${user.wechat}</td><td>${user.phone}</td><td>${user.orderCount}</td><td>${user.totalDraws}</td><td>${user.firstPayTime}</td>
-                    <td>${user.full10Time}</td><td>${user.earlyBirdReward}</td><td>${user.romanceDraws}</td><td>${user.romanceCondition}</td>
+                    <td>${user.full10Time}</td><td>${user.limitedCards}</td><td>${user.romanceDraws}</td><td>${user.romanceCondition}</td>
                 </tr>
             `).join('') : '<tr><td colspan="9" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
@@ -475,8 +489,8 @@
         });
 
         function exportExcel() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '首次支付时间', '满10抽时间', '早期活动奖励', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯获得条件'];
-            const data = filteredData.map(u => [u.wechat, u.phone, u.orderCount, u.orderNos, u.items, u.totalDraws, u.firstPayTime, u.full10Time, u.earlyBirdReward, u.activity0_1h, u.activity1_6h, u.activity6_24h, u.romanceDraws, u.romanceCondition]);
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '首次支付时间', '满10抽时间', '限时小卡123获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子限时小卡获得情况'];
+            const data = filteredData.map(u => [u.wechat, u.phone, u.orderCount, u.orderNos, u.items, u.totalDraws, u.firstPayTime, u.full10Time, u.limitedCards, u.activity0_1h, u.activity1_6h, u.activity6_24h, u.romanceDraws, u.romanceCondition]);
             const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, '用户统计');
