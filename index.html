@@ -48,7 +48,7 @@
         .table-header h3 { font-size: 16px; color: #333; }
         .search-box { padding: 8px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; width: 200px; }
         
-        .table-wrapper { overflow-x: auto; max-height: 500px; overflow-y: auto; }
+        .table-wrapper { overflow-x: auto; max-height: 700px; overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
         th { background: #f8f9ff; color: #666; font-weight: 600; position: sticky; top: 0; z-index: 10; }
@@ -84,12 +84,12 @@
         <div class="upload-section">
             <div class="upload-box" id="uploadBox">
                 <div>📁</div>
-                <h3>点击或拖拽上传Excel文件</h3>
-                <p>支持 .xlsx 和 .xls 格式</p>
+                <h3>点击或拖拽上传数据文件</h3>
+                <p>支持 .xlsx、.xls 和 .csv 格式，可批量选择多个文件</p>
             </div>
-            <input type="file" id="fileInput" accept=".xlsx,.xls">
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple>
             <button class="btn" id="analyzeBtn" disabled>开始分析</button>
-            <p id="fileName" style="margin-top: 15px; color: #666;"></p>
+            <div id="fileList" style="margin-top: 15px; color: #666;"></div>
         </div>
 
         <div id="resultSection" class="hidden">
@@ -100,9 +100,37 @@
                 <div class="stat-card"><div class="value" id="avgDraws">-</div><div class="label">平均抽数</div></div>
             </div>
 
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>🔍 原始数据预览（前3行）</h3>
+                    <span style="font-size:12px;color:#999;">如有问题以及格式修改请联系开发者</span>
+                </div>
+                <div class="table-wrapper" style="max-height: 200px;">
+                    <table id="rawDataTable">
+                        <thead><tr id="rawDataHeader"></tr></thead>
+                        <tbody id="rawDataBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="charts-row">
-                <div class="chart-card"><h3>📊 卡片类型分布</h3><div class="chart-container" id="typePieChart"></div></div>
+                <div class="chart-card"><h3>📊 已抽取的卡片类型分布</h3><div class="chart-container" id="typePieChart"></div></div>
                 <div class="chart-card"><h3>📈 卡片销量TOP10</h3><div class="chart-container" id="cardBarChart"></div></div>
+            </div>
+
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>🎴 卡片统计明细</h3>
+                    <span style="font-size:12px;color:#999;">共 <span id="cardTotalCount">0</span> 种卡片</span>
+                </div>
+                <div class="table-wrapper" style="max-height: 300px;">
+                    <table id="cardStatsTable">
+                        <thead>
+                            <tr><th>卡片名称</th><th>卡片类型</th><th>抽取张数</th><th>涉及用户数</th></tr>
+                        </thead>
+                        <tbody id="cardStatsBody"></tbody>
+                    </table>
+                </div>
             </div>
 
             <div class="charts-row">
@@ -112,17 +140,39 @@
 
             <div class="table-section">
                 <div class="table-header">
+                    <h3>⏰ 活动期统计明细</h3>
+                </div>
+                <div class="table-wrapper" style="max-height: 200px;">
+                    <table id="activityStatsTable">
+                        <thead>
+                            <tr><th>时间段</th><th>订单数</th><th>参与用户数</th><th>总抽数</th></tr>
+                        </thead>
+                        <tbody id="activityStatsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-section">
+                <div class="table-header">
                     <h3>📋 用户数据表格</h3>
                     <div>
-                        <input type="text" class="search-box" id="searchInput" placeholder="搜索下单账号...">
-                        <button class="btn btn-sm" style="margin-left: 10px;" onclick="exportExcel()">导出Excel</button>
+                        <input type="text" class="search-box" id="searchInput" placeholder="搜索下单账号、手机号...">
+                        <button class="btn btn-sm" style="margin-left: 5px;" onclick="doSearch()">搜索</button>
+                        <select id="exportSelect" class="btn btn-sm" style="margin-left: 5px; background: white; color: #333; border: 1px solid #ddd; cursor: pointer;">
+                            <option value="">📥 导出Excel...</option>
+                            <option value="all">全部数据</option>
+                            <option value="user">用户统计</option>
+                            <option value="card">卡片统计</option>
+                            <option value="activity">活动期统计</option>
+                            <option value="milestone">满赠达标统计</option>
+                        </select>
                     </div>
                 </div>
                 <div class="table-wrapper">
                     <table id="userTable">
                         <thead>
                             <tr>
-                                <th>下单账号</th><th>手机号</th><th>订单数</th><th>总抽数</th><th>首次支付时间</th>
+                                <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>总抽数</th><th>首次支付时间</th>
                                 <th>满10抽时间</th><th>限时小卡123获得情况</th><th>7.13-7.15抽数</th><th>浪漫疯子限时小卡获得情况</th>
                             </tr>
                         </thead>
@@ -153,34 +203,96 @@
         const uploadBox = document.getElementById('uploadBox');
         const fileInput = document.getElementById('fileInput');
         const analyzeBtn = document.getElementById('analyzeBtn');
-        const fileName = document.getElementById('fileName');
+        const fileList = document.getElementById('fileList');
         const resultSection = document.getElementById('resultSection');
         const loadingSection = document.getElementById('loadingSection');
+
+        let fileDataList = [];
 
         uploadBox.addEventListener('click', () => fileInput.click());
         uploadBox.addEventListener('dragover', (e) => { e.preventDefault(); uploadBox.classList.add('active'); });
         uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('active'));
-        uploadBox.addEventListener('drop', (e) => { e.preventDefault(); uploadBox.classList.remove('active'); if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]); });
-        fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+        uploadBox.addEventListener('drop', (e) => { 
+            e.preventDefault(); 
+            uploadBox.classList.remove('active'); 
+            if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files); 
+        });
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFiles(e.target.files); });
 
-        function handleFile(file) {
-            fileName.textContent = `已选择：${file.name}`;
-            const reader = new FileReader();
-            reader.onload = (e) => { fileData = new Uint8Array(e.target.result); analyzeBtn.disabled = false; };
-            reader.readAsArrayBuffer(file);
+        function handleFiles(files) {
+            fileDataList = [];
+            const names = [];
+            
+            Array.from(files).forEach(file => {
+                names.push(file.name);
+                const reader = new FileReader();
+                reader.onload = (e) => { 
+                    // 根据文件扩展名决定数据格式
+                    if (file.name.toLowerCase().endsWith('.csv')) {
+                        // CSV文件：尝试用GBK编码解析（处理中文乱码）
+                        try {
+                            const decoder = new TextDecoder('GBK');
+                            const text = decoder.decode(new Uint8Array(e.target.result));
+                            fileDataList.push({ data: text, type: 'csv' });
+                        } catch (err) {
+                            // 如果GBK解码失败，尝试UTF-8
+                            fileDataList.push({ data: e.target.result, type: 'csv' });
+                        }
+                    } else {
+                        // Excel文件
+                        fileDataList.push({ data: new Uint8Array(e.target.result), type: 'excel' });
+                    }
+                    if (fileDataList.length === files.length) {
+                        analyzeBtn.disabled = false;
+                    }
+                };
+                // 所有文件都读取为ArrayBuffer，以便正确处理GBK编码
+                reader.readAsArrayBuffer(file);
+            });
+            
+            fileList.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">
+                ${names.map(name => `<span style="background:#f0f0f0;padding:4px 12px;border-radius:12px;font-size:13px;">📄 ${name}</span>`).join('')}
+                <span style="color:#667eea;">共 ${files.length} 个文件</span>
+            </div>`;
         }
 
         analyzeBtn.addEventListener('click', async () => {
-            if (!fileData) return;
+            if (fileDataList.length === 0) return;
             loadingSection.classList.remove('hidden');
             resultSection.classList.add('hidden');
 
             await new Promise(r => setTimeout(r, 300));
             try {
-                const workbook = XLSX.read(fileData, { type: 'array' });
-                const df = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                processData(df);
+                let allData = [];
+                
+                // 合并所有文件的数据
+                for (let i = 0; i < fileDataList.length; i++) {
+                    let df;
+                    if (fileDataList[i].type === 'csv') {
+                        // CSV文件解析（已解码为字符串）
+                        const csvData = XLSX.read(fileDataList[i].data, { type: 'string' });
+                        df = XLSX.utils.sheet_to_json(csvData.Sheets[csvData.SheetNames[0]]);
+                    } else {
+                        // Excel文件解析
+                        const workbook = XLSX.read(fileDataList[i].data, { type: 'array' });
+                        df = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    }
+                    
+                    // 调试：显示前两行数据的列名
+                    if (df.length > 0 && i === 0) {
+                        console.log('=== 数据预览（前两行）===');
+                        console.log('列名:', Object.keys(df[0]));
+                        console.log('第一行:', df[0]);
+                        if (df.length > 1) console.log('第二行:', df[1]);
+                    }
+                    
+                    allData = allData.concat(df);
+                }
+                
+                processData(allData);
+                renderRawData(allData);
                 renderCharts();
+                renderStatsTables();
                 filteredData = [...userData];
                 renderTable(1);
                 loadingSection.classList.add('hidden');
@@ -192,29 +304,140 @@
             }
         });
 
+        function renderRawData(data) {
+            if (!data || data.length === 0) return;
+            
+            const headers = Object.keys(data[0]);
+            const headerRow = document.getElementById('rawDataHeader');
+            const bodyRow = document.getElementById('rawDataBody');
+            
+            // 只显示前15列
+            const displayHeaders = headers.slice(0, 15);
+            
+            headerRow.innerHTML = displayHeaders.map(h => `<th>${h}</th>`).join('');
+            
+            // 显示前3行
+            const previewRows = data.slice(0, 3);
+            bodyRow.innerHTML = previewRows.map(row => `
+                <tr>${displayHeaders.map(h => `<td>${row[h] !== undefined ? String(row[h]).substring(0, 30) : ''}</td>`).join('')}</tr>
+            `).join('');
+            
+            console.log('=== 所有列名 ===');
+            console.log(headers);
+            console.log('=== 前3行数据 ===');
+            console.log(previewRows);
+        }
+
+        function getCardType(cardName) {
+            if (!cardName) return '未知';
+            const name = String(cardName).toUpperCase();
+            if (name.startsWith('SSSR')) return 'SSSR';
+            if (name.startsWith('SSR')) return 'SSR';
+            if (name.startsWith('SR')) return 'SR';
+            if (name.startsWith('R')) return 'R';
+            if (name.startsWith('N')) return 'N';
+            return '其他';
+        }
+
         function processData(df) {
             const cardData = [], orderData = [];
 
             df.forEach(row => {
-                const orderNo = row['订单编号'];
-                const wechat = row['下单账号'];
-                const phone = row['收货人/提货人手机号'];
-                const payTimeRaw = row['支付时间'];
+                const orderNo = row['订单编号'] || row['订单号'];
+                const wechat = row['下单账号'] || row['账号'];
+                const phone = row['收货人/提货人手机号'] || row['手机号'] || row['收货人手机号'];
+                // 支持多种日期字段名
+                const payTimeRaw = row['支付时间'] || row['下单时间'] || row['付款时间'] || row['成交时间'];
                 const orderDesc = row['订单描述'] ? String(row['订单描述']) : '';
                 const giftInfo = row['赠品'] ? String(row['赠品']) : '';
                 const itemCount = row['商品总件数'] || 0;
+                
+                // 判断订单类型：是否有奖品、是否是端盒
+                let hasPrize = giftInfo && giftInfo.includes('奖品');
+                let isDuanhe = false;
+                let duanheCount = 0;
+                if (orderDesc) {
+                    const items = orderDesc.split(';');
+                    items.forEach(item => {
+                        item = item.trim();
+                        if (!item || !item.includes('[购买数量:')) return;
+                        const namePart = item.split('[购买数量:')[0].trim();
+                        const qty = parseInt(item.split('[购买数量:')[1].replace(']', '').trim()) || 1;
+                        if (namePart.includes('端盒') || namePart.includes('一键端盒')) {
+                            isDuanhe = true;
+                            duanheCount += qty;
+                        }
+                    });
+                }
+                
+                // 有效订单：有奖品 或者 是端盒订单
+                // 没有奖品的纯盲盒订单（还没拆开的）不算
+                const isValidOrder = hasPrize || isDuanhe;
 
                 let payTime = null;
-                if (payTimeRaw) {
+                if (payTimeRaw !== undefined && payTimeRaw !== null && payTimeRaw !== '') {
                     try {
-                        if (payTimeRaw instanceof Date) payTime = payTimeRaw;
-                        else {
-                            const str = String(payTimeRaw);
-                            payTime = str.includes('/') 
-                                ? new Date(...str.split(/[\/\s]/).map((p, i) => i === 1 ? parseInt(p) - 1 : parseInt(p) || 0))
-                                : new Date(str);
+                        if (payTimeRaw instanceof Date) {
+                            payTime = payTimeRaw;
+                        } else if (typeof payTimeRaw === 'number') {
+                            // Excel日期序列号（如 46214.72247685185）
+                            // Excel日期是"无时区"的，需要按本地时间解析
+                            // 方法：先计算UTC时间的年月日时分秒，再按本地时间创建Date
+                            const excelDays = payTimeRaw;
+                            // 转换为毫秒（相对于1899-12-30 00:00:00 UTC）
+                            const msSinceExcelEpoch = excelDays * 86400 * 1000;
+                            const utcDate = new Date(msSinceExcelEpoch + Date.UTC(1899, 11, 30));
+                            // 提取UTC时间的年月日时分秒
+                            const year = utcDate.getUTCFullYear();
+                            const month = utcDate.getUTCMonth();
+                            const day = utcDate.getUTCDate();
+                            const hours = utcDate.getUTCHours();
+                            const minutes = utcDate.getUTCMinutes();
+                            const seconds = utcDate.getUTCSeconds();
+                            // 按本地时间创建Date对象（把Excel的时间当成是本地时间）
+                            payTime = new Date(year, month, day, hours, minutes, seconds);
+                        } else {
+                            const str = String(payTimeRaw).trim().replace(/^\uFEFF/, '');
+                            if (!str || str === '-' || str === 'null' || str === 'undefined' || str === 'NaN') {
+                                payTime = null;
+                            } else if (!isNaN(Number(str)) && Number(str) > 40000 && Number(str) < 60000) {
+                                // 纯数字字符串且在Excel日期范围内
+                                const excelDays = Number(str);
+                                const msSinceExcelEpoch = excelDays * 86400 * 1000;
+                                const utcDate = new Date(msSinceExcelEpoch + Date.UTC(1899, 11, 30));
+                                const year = utcDate.getUTCFullYear();
+                                const month = utcDate.getUTCMonth();
+                                const day = utcDate.getUTCDate();
+                                const hours = utcDate.getUTCHours();
+                                const minutes = utcDate.getUTCMinutes();
+                                const seconds = utcDate.getUTCSeconds();
+                                payTime = new Date(year, month, day, hours, minutes, seconds);
+                            } else if (str.includes('/')) {
+                                // 格式：YYYY/MM/DD HH:MM:SS 或 MM/DD/YYYY HH:MM:SS
+                                const parts = str.split(/[\/\s]/);
+                                if (parts[0].length === 4) {
+                                    payTime = new Date(
+                                        parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]),
+                                        parseInt(parts[3]) || 0, parseInt(parts[4]) || 0, parseInt(parts[5]) || 0
+                                    );
+                                } else {
+                                    payTime = new Date(
+                                        parseInt(parts[2]) || 2026, parseInt(parts[0]) - 1, parseInt(parts[1]),
+                                        parseInt(parts[3]) || 0, parseInt(parts[4]) || 0, parseInt(parts[5]) || 0
+                                    );
+                                }
+                            } else {
+                                // 格式：YYYY-MM-DD HH:MM:SS
+                                payTime = new Date(str);
+                            }
                         }
-                    } catch (e) { payTime = null; }
+                        // 验证日期是否有效
+                        if (payTime && (isNaN(payTime.getTime()) || payTime.getTime() < 100000000000)) {
+                            payTime = null;
+                        }
+                    } catch (e) { 
+                        payTime = null; 
+                    }
                 }
 
                 let activityPeriod = '';
@@ -225,7 +448,16 @@
                 }
 
                 const isRomancePeriod = payTime && payTime >= ROMANCE_START && payTime <= ROMANCE_END;
-                orderData.push({ orderNo, wechat, phone, payTime, orderDesc, itemCount, activityPeriod, isRomancePeriod });
+                
+                // 计算有效抽数：奖品数 + 端盒数*382
+                // 先统计奖品数量（从赠品里来的cardData会统计）
+                // 这里先记端盒的抽数，奖品抽数后面在userMap里累计
+                const duanheDraws = duanheCount * 382;
+                
+                // 只记录有效订单（有奖品或端盒）
+                if (isValidOrder) {
+                    orderData.push({ orderNo, wechat, phone, payTime, orderDesc, itemCount: duanheDraws, activityPeriod, isRomancePeriod, isDuanhe, duanheCount, hasPrize });
+                }
 
                 if (orderDesc) {
                     orderDesc.split(';').forEach(item => {
@@ -234,6 +466,8 @@
                         const namePart = item.split('[购买数量:')[0].trim();
                         const qty = parseInt(item.split('[购买数量:')[1].replace(']', '').trim()) || 1;
                         if (namePart.includes('盲盒商品')) return;
+                        // 跳过端盒商品（端盒是382张打包，不统计到单张卡片里）
+                        if (namePart.includes('端盒') || namePart.includes('一键端盒')) return;
 
                         let cardName = namePart
                             .replace('周柯宇爱意正值炽夏小卡抽抽乐-', '')
@@ -245,7 +479,7 @@
                         if (!cardName) return;
 
                         for (let i = 0; i < qty; i++) {
-                            cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: cardName.slice(0, 2) || '未知', activityPeriod, isRomancePeriod });
+                            cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
                         }
                     });
                 }
@@ -258,35 +492,92 @@
                         if (parts.length < 2) return;
                         const cardName = parts[1].trim();
                         if (!cardName) return;
-                        cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: cardName.slice(0, 2) || '未知', activityPeriod, isRomancePeriod });
+                        // 跳过端盒
+                        if (cardName.includes('端盒') || cardName.includes('一键端盒')) return;
+                        cardData.push({ orderNo, wechat, phone, payTime, cardName, cardType: getCardType(cardName), activityPeriod, isRomancePeriod });
                     });
                 }
             });
 
             const userMap = new Map();
+            
+            // 先从cardData（奖品）统计
             cardData.forEach(card => {
-                if (!userMap.has(card.wechat)) userMap.set(card.wechat, { wechat: card.wechat, phone: card.phone, orders: new Set(), cards: [], payTimes: [], activityDraws: { '0-1小时': 0, '1-6小时': 0, '6-24小时': 0 }, romanceDraws: 0, romanceOrders: 0 });
+                if (!userMap.has(card.wechat)) userMap.set(card.wechat, { 
+                    wechat: card.wechat, phone: card.phone, 
+                    orders: new Set(), cards: [], payTimes: [], 
+                    activityDraws: { '0-1小时': 0, '1-6小时': 0, '6-24小时': 0 }, 
+                    romanceDraws: 0, romanceOrders: 0, 
+                    totalDraws: 0, orderDraws: [],
+                    prizeOrders: new Set() // 有奖品的订单
+                });
                 const user = userMap.get(card.wechat);
                 user.orders.add(card.orderNo);
+                user.prizeOrders.add(card.orderNo);
                 user.cards.push(card.cardName);
                 if (card.payTime) user.payTimes.push(card.payTime);
-                if (card.activityPeriod) user.activityDraws[card.activityPeriod]++;
+                // 奖品也算一抽
+                user.totalDraws++;
                 if (card.isRomancePeriod) user.romanceDraws++;
+                if (card.activityPeriod) user.activityDraws[card.activityPeriod]++;
+                // 保存奖品订单的时间和抽数
+                if (card.payTime) {
+                    const existing = user.orderDraws.find(o => o.orderNo === card.orderNo);
+                    if (existing) {
+                        existing.draws++;
+                    } else {
+                        user.orderDraws.push({ orderNo: card.orderNo, time: card.payTime, draws: 1, isPrize: true });
+                    }
+                }
             });
+            
+            // 再从orderData（端盒等）统计
             orderData.forEach(order => {
-                if (!userMap.has(order.wechat)) userMap.set(order.wechat, { wechat: order.wechat, phone: order.phone, orders: new Set(), cards: [], payTimes: [], activityDraws: { '0-1小时': 0, '1-6小时': 0, '6-24小时': 0 }, romanceDraws: 0, romanceOrders: 0 });
+                if (!userMap.has(order.wechat)) userMap.set(order.wechat, { 
+                    wechat: order.wechat, phone: order.phone, 
+                    orders: new Set(), cards: [], payTimes: [], 
+                    activityDraws: { '0-1小时': 0, '1-6小时': 0, '6-24小时': 0 }, 
+                    romanceDraws: 0, romanceOrders: 0, 
+                    totalDraws: 0, orderDraws: [],
+                    prizeOrders: new Set()
+                });
                 const user = userMap.get(order.wechat);
                 user.orders.add(order.orderNo);
                 if (!user.phone && order.phone) user.phone = order.phone;
                 if (order.payTime) user.payTimes.push(order.payTime);
-                if (order.isRomancePeriod) user.romanceOrders++;
+                
+                // 端盒订单：加382抽
+                if (order.isDuanhe && order.itemCount > 0) {
+                    user.totalDraws += order.itemCount;
+                    if (order.isRomancePeriod) {
+                        user.romanceOrders++;
+                        user.romanceDraws += order.itemCount;
+                    }
+                    // 活动期抽数
+                    const t = order.payTime;
+                    if (t) {
+                        const PHASE2_START = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000);
+                        if (t >= ACTIVITY_START && t < ACTIVITY_1H_END) {
+                            user.activityDraws['0-1小时'] += order.itemCount;
+                        } else if (t >= ACTIVITY_1H_END && t < ACTIVITY_6H_END) {
+                            user.activityDraws['1-6小时'] += order.itemCount;
+                        } else if (t >= ACTIVITY_6H_END && t < PHASE2_START) {
+                            user.activityDraws['6-24小时'] += order.itemCount;
+                        }
+                    }
+                    // 保存端盒订单的时间和抽数
+                    if (order.payTime) {
+                        user.orderDraws.push({ orderNo: order.orderNo, time: order.payTime, draws: order.itemCount, isDuanhe: true });
+                    }
+                }
             });
 
             userData = [];
             userMap.forEach(user => {
-                const payTimes = user.payTimes.filter(t => t);
-                const firstPayTime = payTimes.length > 0 ? new Date(Math.min(...payTimes.map(t => t.getTime()))) : null;
-                const totalDraws = user.cards.length;
+                // 过滤掉无效的日期
+                const validPayTimes = user.payTimes.filter(t => t && t instanceof Date && !isNaN(t.getTime()) && t.getTime() > 100000000000);
+                const firstPayTime = validPayTimes.length > 0 ? new Date(Math.min(...validPayTimes.map(t => t.getTime()))) : null;
+                const totalDraws = user.totalDraws || 0;
                 
                 const uniqueCards = [...new Set(user.cards)];
                 const cardCounts = {};
@@ -297,12 +588,16 @@
                 const cardsBefore10 = [...user.cards].slice(0, 10);
 
                 let full10Time = null;
-                if (payTimes.length > 0) {
-                    const sortedPayTimes = [...payTimes].sort((a, b) => a.getTime() - b.getTime());
-                    let cumCount = 0;
-                    for (const pt of sortedPayTimes) {
-                        cumCount++;
-                        if (cumCount >= 10) { full10Time = pt; break; }
+                if (totalDraws >= 10 && user.orderDraws && user.orderDraws.length > 0) {
+                    // 按订单时间顺序累计抽数，找到满10抽的时间
+                    const sortedOrders = [...user.orderDraws].sort((a, b) => a.time.getTime() - b.time.getTime());
+                    let cumDraws = 0;
+                    for (const order of sortedOrders) {
+                        cumDraws += order.draws;
+                        if (cumDraws >= 10) {
+                            full10Time = order.time;
+                            break;
+                        }
                     }
                 }
 
@@ -338,8 +633,11 @@
                     else romanceCondition = '非首次下单:未达标';
                 }
 
+                // 有效订单数 = 有奖品的订单数 + 端盒订单数
+                const validOrderCount = user.orders.size; // 现在orders里只有有效订单
+                
                 userData.push({
-                    wechat: user.wechat, phone: user.phone || '', orderCount: user.orders.size,
+                    wechat: user.wechat, phone: user.phone || '', orderCount: validOrderCount,
                     orderNos: [...user.orders].join(';'), items: itemList || '无', totalDraws,
                     firstPayTime: firstPayTime ? formatDate(firstPayTime) : '',
                     full10Time: full10Time ? formatDate(full10Time) : '', earlyBirdReward,
@@ -369,15 +667,59 @@
             });
             typeStats = Array.from(typeCountMap.values()).sort((a, b) => b.count - a.count);
 
+            // 活动期统计（按时间段划分，不重叠）
+            // 活动时间：2026-07-11 17:20 ~ 2026-07-31 17:17
+            const ACTIVITY_END = new Date('2026-07-31T17:17:00');
+            const PHASE2_START = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000); // 7月12日17:20
+            
             activityStats = [
                 { period: '0-1小时', orders: 0, users: new Set(), draws: 0 },
                 { period: '1-6小时', orders: 0, users: new Set(), draws: 0 },
                 { period: '6-24小时', orders: 0, users: new Set(), draws: 0 },
-                { period: '浪漫疯子活动期', orders: 0, users: new Set(), draws: 0 }
+                { period: '活动中期(7.12-7.13)', orders: 0, users: new Set(), draws: 0 },
+                { period: '浪漫疯子活动期', orders: 0, users: new Set(), draws: 0 },
+                { period: '活动后期(7.15以后)', orders: 0, users: new Set(), draws: 0 },
+                { period: '整个活动期', orders: 0, users: new Set(), draws: 0 }
             ];
+            
+            function getPeriodIndex(t) {
+                if (!t) return -1;
+                if (t >= ACTIVITY_START && t < ACTIVITY_1H_END) return 0;
+                if (t >= ACTIVITY_1H_END && t < ACTIVITY_6H_END) return 1;
+                if (t >= ACTIVITY_6H_END && t < PHASE2_START) return 2;
+                if (t >= PHASE2_START && t < ROMANCE_START) return 3;
+                if (t >= ROMANCE_START && t < ROMANCE_END) return 4;
+                if (t >= ROMANCE_END && t <= ACTIVITY_END) return 5;
+                return -1;
+            }
+            
+            // 从奖品卡片统计（每个1抽）
+            cardData.forEach(card => {
+                const idx = getPeriodIndex(card.payTime);
+                if (idx >= 0) {
+                    activityStats[idx].orders++;
+                    activityStats[idx].users.add(card.wechat);
+                    activityStats[idx].draws++;
+                    // 整个活动期
+                    activityStats[6].orders++;
+                    activityStats[6].users.add(card.wechat);
+                    activityStats[6].draws++;
+                }
+            });
+            
+            // 从端盒订单统计（每个382抽）
             orderData.forEach(order => {
-                let idx = order.activityPeriod === '0-1小时' ? 0 : order.activityPeriod === '1-6小时' ? 1 : order.activityPeriod === '6-24小时' ? 2 : order.isRomancePeriod ? 3 : -1;
-                if (idx >= 0) { activityStats[idx].orders++; activityStats[idx].users.add(order.wechat); activityStats[idx].draws += order.itemCount; }
+                if (!order.isDuanhe) return;
+                const idx = getPeriodIndex(order.payTime);
+                if (idx >= 0) {
+                    activityStats[idx].orders++;
+                    activityStats[idx].users.add(order.wechat);
+                    activityStats[idx].draws += order.itemCount || 0;
+                    // 整个活动期
+                    activityStats[6].orders++;
+                    activityStats[6].users.add(order.wechat);
+                    activityStats[6].draws += order.itemCount || 0;
+                }
             });
             activityStats.forEach(stat => stat.userCount = stat.users.size);
 
@@ -445,6 +787,42 @@
             window.addEventListener('resize', () => { Object.values(charts).forEach(c => c.resize()); });
         }
 
+        function renderStatsTables() {
+            // 渲染卡片统计表格
+            const cardStatsBody = document.getElementById('cardStatsBody');
+            const totalCardDraws = cardStats.reduce((sum, c) => sum + c.count, 0);
+            const totalCardUsers = new Set();
+            cardStats.forEach(c => c.users.forEach(u => totalCardUsers.add(u)));
+            
+            cardStatsBody.innerHTML = cardStats.map(card => `
+                <tr>
+                    <td>${card.cardName}</td>
+                    <td>${card.cardType}</td>
+                    <td>${card.count}</td>
+                    <td>${card.users.size}</td>
+                </tr>
+            `).join('') + `
+                <tr style="background:#f0f4ff;font-weight:bold;">
+                    <td>合计</td>
+                    <td>${cardStats.length}种</td>
+                    <td>${totalCardDraws}</td>
+                    <td>${totalCardUsers.size}</td>
+                </tr>
+            `;
+            document.getElementById('cardTotalCount').textContent = cardStats.length;
+
+            // 渲染活动期统计表格
+            const activityStatsBody = document.getElementById('activityStatsBody');
+            activityStatsBody.innerHTML = activityStats.map(stat => `
+                <tr>
+                    <td>${stat.period}</td>
+                    <td>${stat.orders}</td>
+                    <td>${stat.userCount}</td>
+                    <td>${stat.draws}</td>
+                </tr>
+            `).join('');
+        }
+
         function renderTable(page) {
             currentPage = page;
             const start = (page - 1) * pageSize;
@@ -454,10 +832,18 @@
             const tbody = document.getElementById('userTableBody');
             tbody.innerHTML = pageData.length > 0 ? pageData.map(user => `
                 <tr>
-                    <td>${user.wechat}</td><td>${user.phone}</td><td>${user.orderCount}</td><td>${user.totalDraws}</td><td>${user.firstPayTime}</td>
-                    <td>${user.full10Time}</td><td>${user.limitedCards}</td><td>${user.romanceDraws}</td><td>${user.romanceCondition}</td>
+                    <td>${user.wechat || ''}</td>
+                    <td>${user.phone || ''}</td>
+                    <td>${user.orderCount || 0}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${user.orderNos || ''}">${user.orderNos || ''}</td>
+                    <td>${user.totalDraws || 0}</td>
+                    <td>${user.firstPayTime || ''}</td>
+                    <td>${user.full10Time || ''}</td>
+                    <td>${user.limitedCards || ''}</td>
+                    <td>${user.romanceDraws || 0}</td>
+                    <td>${user.romanceCondition || ''}</td>
                 </tr>
-            `).join('') : '<tr><td colspan="9" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            `).join('') : '<tr><td colspan="10" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -482,20 +868,104 @@
             pagination.innerHTML = html;
         }
 
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            const keyword = e.target.value.toLowerCase();
-            filteredData = keyword ? userData.filter(u => u.wechat.toLowerCase().includes(keyword) || u.phone.includes(keyword)) : [...userData];
+        function doSearch() {
+            const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
+            if (keyword) {
+                filteredData = userData.filter(u => {
+                    const wechatMatch = u.wechat && String(u.wechat).toLowerCase().includes(keyword);
+                    const phoneMatch = u.phone && String(u.phone).toLowerCase().includes(keyword);
+                    const orderNosMatch = u.orderNos && String(u.orderNos).includes(keyword);
+                    return wechatMatch || phoneMatch || orderNosMatch;
+                });
+            } else {
+                filteredData = [...userData];
+            }
             renderTable(1);
+        }
+
+        // 保留输入框实时搜索
+        document.getElementById('searchInput').addEventListener('input', () => {
+            doSearch();
         });
 
-        function exportExcel() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '首次支付时间', '满10抽时间', '限时小卡123获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子限时小卡获得情况'];
-            const data = filteredData.map(u => [u.wechat, u.phone, u.orderCount, u.orderNos, u.items, u.totalDraws, u.firstPayTime, u.full10Time, u.limitedCards, u.activity0_1h, u.activity1_6h, u.activity6_24h, u.romanceDraws, u.romanceCondition]);
-            const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, '用户统计');
-            XLSX.writeFile(workbook, '订单分析报告.xlsx');
+        // 按回车键搜索
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                doSearch();
+            }
+        });
+
+        function getTimestampFilename(prefix) {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hour = String(now.getHours()).padStart(2, '0');
+            const minute = String(now.getMinutes()).padStart(2, '0');
+            return `${prefix}_${year}${month}${day}_${hour}${minute}.xlsx`;
         }
+
+        function exportUserSheet() {
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '首次支付时间', '满10抽时间', '限时小卡123获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子限时小卡获得情况'];
+            const data = filteredData.map(u => [
+                u.wechat || '', u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
+                u.totalDraws || 0, u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
+                u.activity0_1h || 0, u.activity1_6h || 0, u.activity6_24h || 0,
+                u.romanceDraws || 0, u.romanceCondition || ''
+            ]);
+            return XLSX.utils.aoa_to_sheet([headers, ...data]);
+        }
+
+        function exportCardSheet() {
+            const headers = ['卡片名称', '卡片类型', '抽取张数', '涉及用户数'];
+            const data = cardStats.map(c => [c.cardName, c.cardType, c.count, c.users.size]);
+            return XLSX.utils.aoa_to_sheet([headers, ...data]);
+        }
+
+        function exportActivitySheet() {
+            const headers = ['时间段', '订单数', '参与用户数', '总抽数'];
+            const data = activityStats.map(s => [s.period, s.orders, s.userCount, s.draws]);
+            return XLSX.utils.aoa_to_sheet([headers, ...data]);
+        }
+
+        function exportMilestoneSheet() {
+            const headers = ['里程碑（抽数）', '达标人数', '达标率'];
+            const data = milestoneStats.map(m => [m.milestone, m.count, m.rate]);
+            return XLSX.utils.aoa_to_sheet([headers, ...data]);
+        }
+
+        function exportExcel(type) {
+            const workbook = XLSX.utils.book_new();
+            
+            if (type === 'all') {
+                XLSX.utils.book_append_sheet(workbook, exportUserSheet(), '用户统计');
+                XLSX.utils.book_append_sheet(workbook, exportCardSheet(), '卡片统计');
+                XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
+                XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_全部'));
+            } else if (type === 'user') {
+                XLSX.utils.book_append_sheet(workbook, exportUserSheet(), '用户统计');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_用户统计'));
+            } else if (type === 'card') {
+                XLSX.utils.book_append_sheet(workbook, exportCardSheet(), '卡片统计');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_卡片统计'));
+            } else if (type === 'activity') {
+                XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_活动期统计'));
+            } else if (type === 'milestone') {
+                XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐数据分析_满赠达标'));
+            }
+        }
+
+        // 导出下拉选择事件
+        document.getElementById('exportSelect').addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (value) {
+                exportExcel(value);
+                e.target.value = ''; // 重置选择
+            }
+        });
     </script>
 </body>
 </html>
