@@ -1935,7 +1935,7 @@
                     <td>${milestoneBadge}</td>
                     <td>${allMemberBadge}</td>
                     <td>${specialBonusBadge}</td>
-                    <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;">${user.xuanchuanGift}</span>` : '<span style="color:#999;font-size:11px;">未参与</span>'}</td>
+                    <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;max-width:320px;display:inline-block;white-space:normal;">${jizanGiftCustomerTextOf(user.xuanchuanGift)}</span>` : '<span style="color:#999;font-size:11px;">未参与</span>'}</td>
                     <td style="white-space:nowrap;">${limitedDetail}</td>
                     <td style="white-space:nowrap;">${buyouDetail}</td>
                     <td>${user.firstPayTime || ''}</td>
@@ -2089,7 +2089,7 @@
                 return [
                     (u._isMerged && u.mergedFrom ? u.mergedFrom.join('；') : (u.wechat || '')), u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                     u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
-                    u.allMemberBonus || '', u.specialBonus || '', u.xuanchuanGift || '未参与',
+                    u.allMemberBonus || '', u.specialBonus || '', jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与',
                     buyouStr,
                     u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                     u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
@@ -2170,7 +2170,7 @@
                 const s = String(raw || '').trim();
                 if (!s || s === '无') return '未参与';
                 if (/[？?]待核实/.test(s)) return '重复填写问卷，请联系客服确认';
-                if (s === '异常，请联系客服') return '审核未通过，请联系客服';
+                if (s === '异常，请联系客服') return JIZAN_FAIL_GUIDE_TEXT;
                 return s;
             };
             // 同手机号多账号映射（基于全量 userData）：备注提示“数据分散，请合并查看”
@@ -2206,7 +2206,7 @@
                 const sAudit = s.audit || {};
                 const sPass = sAudit.pass === true || sAudit.status === '通过' || sAudit.type === '通过';
                 if (sPass) return;
-                let t = buildSuikaSummaryReason(s, { html: false });
+                let t = buildSuikaSummaryReasonWithGuide(s, { html: false });
                 if (!t || !t.trim()) t = sAudit.status || '需人工处理';
                 const lines = t.split('\n').filter(x => x && x.trim());
                 const text = lines.map(x => '提交 ' + (s.code || '') + '：' + x).join('\n');
@@ -2221,7 +2221,8 @@
             };
             const suikaStatusTextOf = (acct, phone) => {
                 const key = suikaStatusMap['a:' + acct] || suikaStatusMap['p:' + normalizePhone(phone)] || '';
-                return key === '通过' ? '审核通过' : (key === '需人工' ? '需人工审核，请联系微店客服' : (key === SUIKA_QTY_ERR_STATUS ? SUIKA_QTY_ERR_STATUS : '未参与'));
+                if (key === '通过') return '审核通过';
+                return key ? suikaCustomerStatusTextOf(key) : '未参与';
             };
             // 成功兑换到的卡面映射（与 suikaStatusMap 同 key 体系：按手机号/账号关联，仅聚合审核通过的请求的换入卡面）
             const suikaPassCardsMap = {};
@@ -2372,7 +2373,7 @@
             });
             const sheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
             // 统一列宽（含「用于兑换的卡」），三处导出入口共用本函数即自动生效
-            sheet['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            sheet['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             return sheet;
         }
 
@@ -2381,7 +2382,7 @@
             if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
             const wb = XLSX.utils.book_new();
             const ws = exportLaibaoSheet();
-            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
             // 集赞修改记录 Sheet（复用集赞修改记录行数据；无集赞数据/无修改记录时写占位行，保证未匹配到 userData 的修改也可见）
             const { headers: jh5, data: jd5 } = buildJizanEditLogSheet();
@@ -2425,7 +2426,8 @@
                 let card = raw;
                 let status = '正常';
                 if (raw === '异常，请联系客服') {
-                    status = '异常';
+                    status = '审核未通过';
+                    card = JIZAN_FAIL_GUIDE_TEXT;
                 } else if (/[？?]待核实/.test(raw)) {
                     status = '待确认，请联系客服';
                     card = raw.replace(/([？?]待核实)\s*$/, '');
@@ -2438,7 +2440,7 @@
                 data.push([u.wechat || '', u.phone || '', card, status, buyouStr]);
             });
             const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-            ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 22 }, { wch: 10 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 36 }, { wch: 14 }, { wch: 14 }];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, '集赞核心信息');
             XLSX.writeFile(wb, getTimestampFilename('集赞核心信息查询表'));
@@ -2991,6 +2993,42 @@
 
         // 碎卡填表格式错误状态文案（改动2/3：张数语义列误填卡面编号时强制需人工审核）
         const SUIKA_QTY_ERR_STATUS = '接龙提交内容填写错误，需人工审核，请联系微店客服';
+
+        // ===== 定案：审核未通过 / 需人工审核 档对外改为「引导填写问题反馈问卷」 =====
+        // 仅改展示与导出层文案；内部状态键（SUIKA_QTY_ERR_STATUS 等）与 userData.xuanchuanGift 存储值不变，
+        // 避免云端已存审核结果 / 导入数据与分组判定失配。代码中无问题反馈问卷链接配置，故按纯文本展示。
+        const JIZAN_FAIL_GUIDE_TEXT = '审核未通过，请填写问题反馈问卷重新提交信息';
+        const SUIKA_MANUAL_GUIDE_TEXT = '需人工审核，请填写问题反馈问卷重新填写具体兑换信息';
+        const SUIKA_QTY_ERR_GUIDE_TEXT = '接龙提交内容填写错误，需人工审核，请填写问题反馈问卷重新填写具体兑换信息';
+        const GUIDE_QUESTIONNAIRE_TAIL = '（已引导填写问题反馈问卷）';
+        // 集赞「宣传集赞礼」对外展示值：内部存储值 '异常，请联系客服' -> 新对外文案；其余原样
+        function jizanGiftCustomerTextOf(v) {
+            const s = String(v == null ? '' : v).trim();
+            return s === '异常，请联系客服' ? JIZAN_FAIL_GUIDE_TEXT : s;
+        }
+        // 碎卡状态对外展示值：填写错误档 / 需人工档 -> 新对外文案；通过、未找到用户等原样
+        function suikaCustomerStatusTextOf(v) {
+            const s = String(v == null ? '' : v).trim();
+            if (s === SUIKA_QTY_ERR_STATUS) return SUIKA_QTY_ERR_GUIDE_TEXT;
+            if (s === '需人工' || s === '需人工处理' || s === '需人工审核') return SUIKA_MANUAL_GUIDE_TEXT;
+            return s;
+        }
+        // 碎卡状态内部展示值：去掉旧「联系客服」话术，仅保留原因分类（内部状态键不变）
+        function suikaInternalStatusTextOf(v) {
+            return String(v == null ? '' : v) === SUIKA_QTY_ERR_STATUS ? '接龙提交内容填写错误，需人工审核' : v;
+        }
+        // 内部「原因明细」：仅需人工 / 填写错误档在原分类末尾追加引导说明，不改变原因分类本身
+        function buildSuikaSummaryReasonWithGuide(s, opts) {
+            const txt = buildSuikaSummaryReason(s, opts);
+            if (!txt) return txt;
+            const audit = (s && s.audit) || {};
+            const st = String(audit.status || '');
+            const isGuideCase = st === SUIKA_QTY_ERR_STATUS
+                || (st !== '通过' && st !== '未找到用户' && !audit.pass);
+            if (!isGuideCase) return txt;
+            const sep = (!opts || opts.html !== false) ? '<br>' : '\n';
+            return txt + sep + GUIDE_QUESTIONNAIRE_TAIL;
+        }
 
         // 按索引区间移除文本片段（用等长空格占位，避免破坏后续正则匹配位置）
         function removeUsedRanges(text, ranges) {
@@ -3731,7 +3769,7 @@
                     return lines.join(withHtml ? '<br>' : '\n');
                 }
                 else if (s.audit.blockedFrom) lines.push('同手机号其他提交需人工处理（' + s.audit.blockedFrom + '）');
-                else lines.push(s.audit.status || '需人工处理');
+                else lines.push(suikaInternalStatusTextOf(s.audit.status || '需人工处理'));
                 return lines.join(withHtml ? '<br>' : '\n');
             }
             const tag = withHtml ? suikaReasonTagged : x => x;
@@ -3883,7 +3921,7 @@
                 const selfReasons = s.requests.map((r, ri) => reasonStrOf(s, ri)).filter(Boolean);
                 const allReasons = s.requests.flatMap(r => r.audit.reasons || []);
                 // 提交级综合表述（优化B）：不再堆叠 [请求N]，改为组级综合；请求明细折叠仍保留逐条
-                let reasonStr = buildSuikaSummaryReason(s);
+                let reasonStr = buildSuikaSummaryReasonWithGuide(s);
                 if (!reasonStr) reasonStr = status;
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
@@ -3907,7 +3945,7 @@
                 const st = r.audit.type || s.audit.status || '需人工处理';
                 const meta = metaOf(st);
                 const user = s.user;
-                const typeStr = r.audit.type || st;
+                const typeStr = suikaInternalStatusTextOf(r.audit.type || st);
                 const reasonStr = (reasonStrOf(s, ri) || st) + ((r.audit.pass && r.warning) ? '（格式需留意）' : '');
                 const released = r.audit.manuallyReleased;
                 // 修改：编辑换入/换出卡后重新审核（标记 manuallyEdited 供导出备注）
@@ -4084,8 +4122,8 @@
                 const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
                 const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => suikaOutCardsText(r.outCards)).join(' ； ');
-                const reasonStr = buildSuikaSummaryReason(s, { html: false });
-                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
+                const reasonStr = buildSuikaSummaryReasonWithGuide(s, { html: false });
+                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, suikaInternalStatusTextOf(status), reasonStr, s.submitTime || ''];
             });
 
             const passHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '用于兑换的卡', '提交时间'];
@@ -4094,7 +4132,7 @@
 
             const passData = byStatus['通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.outStr, r.submitTime]);
             const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
-            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, suikaInternalStatusTextOf(r.audit.type), r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
 
             const wb = XLSX.utils.book_new();
             const mkSheet = (name, headers, data, wideIdx) => {
@@ -4102,10 +4140,10 @@
                 ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 60 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
+            mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 6, 7]);
             mkSheet('通过审核', passHeaders, passData, [6]);
             mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
-            mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
+            mkSheet('需人工处理', handleHeaders, handleData, [5, 8, 10]);
             mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
             XLSX.writeFile(wb, getTimestampFilename('碎卡兑换审核结果'));
         }
@@ -4125,8 +4163,8 @@
                 const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
                 const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => suikaOutCardsText(r.outCards)).join(' ； ');
-                const reasonStr = buildSuikaSummaryReason(s, { html: false });
-                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
+                const reasonStr = buildSuikaSummaryReasonWithGuide(s, { html: false });
+                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, suikaInternalStatusTextOf(status), reasonStr, s.submitTime || ''];
             });
 
             const passHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '用于兑换的卡', '提交时间'];
@@ -4135,7 +4173,7 @@
 
             const passData = byStatus['通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.outStr, r.submitTime]);
             const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
-            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, suikaInternalStatusTextOf(r.audit.type), r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
 
             const mkSheet = async (name, headers, data, wideIdx) => {
                 // 数据量较大时分片让出主线程（每 2000 行让一次）
@@ -4146,10 +4184,10 @@
                 ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 60 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            await mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
+            await mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 6, 7]);
             await mkSheet('通过审核', passHeaders, passData, [6]);
             await mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
-            await mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
+            await mkSheet('需人工处理', handleHeaders, handleData, [5, 8, 10]);
             await mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
             // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
             // 兼容来豹导出：exportLaibaoOnly 已在同一 wb 预添加「修改与放行记录」，此处重复添加会触发
@@ -4222,7 +4260,7 @@
                 const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
                 const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => suikaOutCardsText(r.outCards)).join(' ； ');
-                const reasonStr = buildSuikaSummaryReason(s, { html: false })
+                const reasonStr = buildSuikaSummaryReasonWithGuide(s, { html: false })
                     || (status === '通过' ? '通过' : (s.audit.blockedFrom ? `同手机号其他提交需人工处理（${s.audit.blockedFrom}）` : status));
                 return [s.code, s.nickname || '', s.name || '', s.phone || '', s.orderNo || '', s.submitTime || '', inStr, outStr, status, reasonStr, suikaRemarkOf(s, phoneToAccounts)];
             });
@@ -4265,15 +4303,17 @@
             if (gainData.length === 0) gainData.push(['（无通过记录）', 0, 0]);
             gainData.push(['合计', totalQty, gainUsers.size]);
             const wb = XLSX.utils.book_new();
+            // 对外输出：审核状态列（索引 8）按对客文案渲染；分组过滤仍在原始数据上完成
+            const pubRows = rows => rows.map(r => r.map((c, i) => i === 8 ? suikaCustomerStatusTextOf(c) : c));
             const mkSheet = (name, headers, data, wideIdx) => {
                 const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
                 ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 50 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            mkSheet('全部提交', allHeaders, allData, [6, 7, 9]);
+            mkSheet('全部提交', allHeaders, pubRows(allData), [6, 7, 8, 9]);
             mkSheet('通过审核', passHeaders, passData, [4]);
-            mkSheet('未找到用户', allHeaders, allData.filter(r => r[8] === '未找到用户'), [6, 7, 9]);
-            mkSheet('需人工处理', allHeaders, allData.filter(r => r[8] === '需人工处理'), [6, 7, 9]);
+            mkSheet('未找到用户', allHeaders, pubRows(allData.filter(r => r[8] === '未找到用户')), [6, 7, 9]);
+            mkSheet('需人工处理', allHeaders, pubRows(allData.filter(r => r[8] === '需人工处理')), [6, 7, 8, 9]);
             mkSheet('获得卡汇总', ['换入卡卡面', '兑换数量(张)', '涉及用户数'], gainData, []);
             XLSX.writeFile(wb, getTimestampFilename('碎卡来豹接龙表'));
         }
@@ -4406,7 +4446,7 @@
         // 集赞导出「原因明细」大白话映射（与处理状态同源，展示口径见导出导入结果汇总）
         function jizanReasonTextOf(e) {
             if (!e) return '';
-            if (e.sheet === 'fail' || e.manualStatus === 'abnormal') return '审核未通过，请联系客服';
+            if (e.sheet === 'fail' || e.manualStatus === 'abnormal') return '审核未通过' + GUIDE_QUESTIONNAIRE_TAIL;
             if (!e.matched) return '未匹配到订单，请联系客服';
             if (e.ambiguous) return '同号多账号，请联系客服确认归属';
             if (e.missingInfo) return '填写不完整，请联系客服';
@@ -4663,7 +4703,7 @@
             }
             suikaCloseEditModal();
             reauditAllSubmissions(subChanged ? new Set([String(code)]) : undefined);
-            alert(`已保存并重新审核：提交 ${code} 请求 ${ri + 1} → ${req.audit.type}`);
+            alert(`已保存并重新审核：提交 ${code} 请求 ${ri + 1} → ${suikaInternalStatusTextOf(req.audit.type)}`);
         }
         // 功能2b：提交汇总行「修改」弹窗（编辑昵称/姓名/手机号/订单号）
         function suikaOpenEditSubModal(code) {
@@ -4974,7 +5014,7 @@
                         <td>${escHtml(e.card || '')}</td>
                         <td style="color:${stColor};">${st}</td>
                         <td>${escHtml(e.wechat || '')}</td>
-                        <td>${escHtml(jizanGiftDispOf(e))}</td>
+                        <td style="max-width:340px;white-space:normal;font-size:12px;">${escHtml(jizanGiftCustomerTextOf(jizanGiftDispOf(e)))}</td>
                         <td style="max-width:280px;font-size:12px;">${remarkStr ? escHtml(remarkStr) : ''}${mark}</td>
                         <td style="white-space:nowrap;">${jizanEditBtnHtml(idx)}</td>
                     </tr>`;
@@ -5099,9 +5139,9 @@
             if (!jizanExportData) { alert('请先导入集赞兑换表'); return; }
             const wb = XLSX.utils.book_new();
             const h1 = ['下单账号', '手机号', '宣传集赞礼'];
-            const d1 = userData.map(u => [u.wechat || '', u.phone || '', u.xuanchuanGift || '未参与']);
+            const d1 = userData.map(u => [u.wechat || '', u.phone || '', jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与']);
             const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1]);
-            ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 20 }];
+            ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 36 }];
             XLSX.utils.book_append_sheet(wb, ws1, '宣传集赞礼全量');
             const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '处理状态', '原因明细', '匹配用户', '宣传集赞礼', '备注'];
             const d2 = jizanExportData.map(e => {
@@ -5117,11 +5157,11 @@
                 if (e.missingInfo) remark = (remark ? remark + '；' : '') + '填写不完整，请联系客服';
                 if (e.sheet === 'fail' && (e.note || e.check)) remark = (remark ? remark + '；' : '') + '核查=' + (e.check || '-') + (e.note ? '，' + e.note : '');
                 if (e.manuallyEdited) remark = (remark ? remark + '；' : '') + '客服已修改(' + (e.editedAt || '') + ')' + (e.editedNote ? '：' + e.editedNote : '');
-                const giftDisp = jizanGiftDispOf(e);
+                const giftDisp = jizanGiftCustomerTextOf(jizanGiftDispOf(e));
                 return [e.sheet, e.phone, e.orderNo, e.card, status, reason, e.wechat, giftDisp, remark];
             });
             const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2]);
-            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 30 }, { wch: 24 }, { wch: 18 }, { wch: 42 }];
+            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 42 }, { wch: 24 }, { wch: 36 }, { wch: 42 }];
             XLSX.utils.book_append_sheet(wb, ws2, '导入结果汇总');
             const h3 = ['卡面编号', '稀有度', '数量', '其中待核实', '占比'];
             const d3 = buildJizanGiftSummary();
@@ -5132,7 +5172,7 @@
             const ws4 = userData && userData.length > 0
                 ? exportLaibaoSheet()
                 : XLSX.utils.aoa_to_sheet([['未上传主数据，无法生成来豹接龙查询表']]);
-            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws4, '来豹接龙查询表');
             // 集赞修改记录：所有被客服修改过的集赞记录，每行一次修改（时间正序）——复用独立构造函数
             const { headers: h5, data: d5 } = buildJizanEditLogSheet();
@@ -5154,7 +5194,7 @@
                 (suikaAuditMap[k] || []).forEach(s => {
                     const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
                     const color = suikaMeta[status] || '#ca8a04';
-                    const detail = s.requests.map(r => r.audit.type + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
+                    const detail = s.requests.map(r => suikaInternalStatusTextOf(r.audit.type) + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
                     suikaLines.push(`<div style="font-size:12px;line-height:1.7;color:${color};"><span style="color:#818cf8;">[${k}]</span>【${s.code}】${status}：${detail}</div>`);
                 });
             });
@@ -5163,7 +5203,7 @@
                 : '<div style="color:#999;font-size:12px;">未导入碎卡兑换表或无该用户记录</div>';
 
             const giftHtml = user.xuanchuanGift && user.xuanchuanGift !== '无'
-                ? `<span style="color:#059669;font-weight:bold;">${user.xuanchuanGift}</span>`
+                ? `<span style="color:#059669;font-weight:bold;max-width:320px;display:inline-block;white-space:normal;">${jizanGiftCustomerTextOf(user.xuanchuanGift)}</span>`
                 : '<span style="color:#999;">未参与</span>';
 
             const mergedBadge = merged
