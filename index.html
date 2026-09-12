@@ -727,6 +727,32 @@
 
         async function processData(df) {
             const cardData = [], orderData = [];
+
+            // ===== 修复：按「订单编号 + 商品行」对输入行去重 =====
+            // 背景：同一笔订单可能同时出现在「主表」「补邮表」等多个来源文件中，
+            //       旧逻辑直接 concat 后全量统计，导致补邮订单被重复累加（显示"已补邮*2"）。
+            // 规则：去重键 = 订单编号 + 商品行集合（订单描述按 ';' 拆分、trim、排序后拼接）；
+            //       同一订单含多行不同商品/卡面时各行键不同，仍全部保留，不丢数据；
+            //       订单编号与商品行均为空的行不做去重，保守保留。
+            {
+                const __lineKeyOf = (r) => {
+                    const __no = String((r['订单编号'] || r['订单号'] || '')).trim();
+                    const __desc = String(r['订单描述'] || '');
+                    const __items = __desc.split(';').map(s => s.trim()).filter(Boolean).sort().join(';');
+                    return __no + '|' + __items;
+                };
+                const __seenLineKey = new Set();
+                const __dedupRows = [];
+                for (let __di = 0; __di < df.length; __di++) {
+                    const __k = __lineKeyOf(df[__di]);
+                    if (__k === '|') { __dedupRows.push(df[__di]); continue; }
+                    if (__seenLineKey.has(__k)) continue;
+                    __seenLineKey.add(__k);
+                    __dedupRows.push(df[__di]);
+                }
+                df = __dedupRows;
+            }
+
             const __total = df.length;
             const __BATCH = 5000;
             setAnalysisProgress(0, '准备分析数据...');
@@ -965,6 +991,8 @@
             });
             
             // 再从orderData（端盒等）统计
+            // 修复：补邮订单按订单编号去重登记（同一订单因多来源重复出现时只计一次）
+            const __buyouSeenByOrder = new Map();
             orderData.forEach(order => {
                 if (!userMap.has(order.wechat)) userMap.set(order.wechat, { 
                     wechat: order.wechat, phone: order.phone, 
@@ -1026,10 +1054,22 @@
                     }
                 }
                 
-                // 统计补邮订单
+                // 统计补邮订单（按订单编号去重：同一订单重复出现只计一次，避免"补邮*2"）
                 if (order.isBuyou) {
-                    user.buyouOrders.push({ orderNo: order.orderNo, time: order.payTime, count: order.buyouCount });
-                    user.buyouCount += order.buyouCount;
+                    const __bk = String(order.orderNo || '').trim() ||
+                        ('__no_order_no__|' + String(order.wechat || '') + '|' + String(order.orderDesc || ''));
+                    const __prevBuyou = __buyouSeenByOrder.get(__bk);
+                    if (!__prevBuyou) {
+                        __buyouSeenByOrder.set(__bk, { user: user, count: order.buyouCount || 0 });
+                        user.buyouOrders.push({ orderNo: order.orderNo, time: order.payTime, count: order.buyouCount });
+                        user.buyouCount += order.buyouCount;
+                    } else if ((order.buyouCount || 0) > (__prevBuyou.count || 0)) {
+                        // 同一订单号重复出现：仅补足差值，保留同一订单购买多份补邮的数量语义，绝不重复累加
+                        __prevBuyou.user.buyouCount += (order.buyouCount || 0) - (__prevBuyou.count || 0);
+                        const __rec = (__prevBuyou.user.buyouOrders || []).find(x => String(x.orderNo || '').trim() === String(order.orderNo || '').trim());
+                        if (__rec) __rec.count = order.buyouCount;
+                        __prevBuyou.count = order.buyouCount;
+                    }
                 }
             });
 
@@ -1895,7 +1935,7 @@
                     <td>${milestoneBadge}</td>
                     <td>${allMemberBadge}</td>
                     <td>${specialBonusBadge}</td>
-                    <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;">${user.xuanchuanGift}</span>` : '<span style="color:#999;font-size:11px;">无</span>'}</td>
+                    <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;">${user.xuanchuanGift}</span>` : '<span style="color:#999;font-size:11px;">未参与</span>'}</td>
                     <td style="white-space:nowrap;">${limitedDetail}</td>
                     <td style="white-space:nowrap;">${buyouDetail}</td>
                     <td>${user.firstPayTime || ''}</td>
@@ -2049,7 +2089,7 @@
                 return [
                     (u._isMerged && u.mergedFrom ? u.mergedFrom.join('；') : (u.wechat || '')), u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                     u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
-                    u.allMemberBonus || '', u.specialBonus || '', u.xuanchuanGift || '无',
+                    u.allMemberBonus || '', u.specialBonus || '', u.xuanchuanGift || '未参与',
                     buyouStr,
                     u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                     u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
@@ -2128,7 +2168,7 @@
             // 正常发放=卡面编号原样；重复待核实（卡号+？待核实）=需客服确认文案；异常=审核未通过文案
             const laibaoGiftTextOf = (raw) => {
                 const s = String(raw || '').trim();
-                if (!s || s === '无') return '-';
+                if (!s || s === '无') return '未参与';
                 if (/[？?]待核实/.test(s)) return '重复填写问卷，请联系客服确认';
                 if (s === '异常，请联系客服') return '审核未通过，请联系客服';
                 return s;
@@ -2387,7 +2427,7 @@
                 if (raw === '异常，请联系客服') {
                     status = '异常';
                 } else if (/[？?]待核实/.test(raw)) {
-                    status = '待核实';
+                    status = '待确认，请联系客服';
                     card = raw.replace(/([？?]待核实)\s*$/, '');
                 }
                 let buyouStr = '无需补邮';
@@ -4367,10 +4407,10 @@
         function jizanReasonTextOf(e) {
             if (!e) return '';
             if (e.sheet === 'fail' || e.manualStatus === 'abnormal') return '审核未通过，请联系客服';
-            if (!e.matched) return '手机号+订单号未匹配到下单用户';
-            if (e.ambiguous) return '同号多账号，订单号未命中，需确认归属';
-            if (e.missingInfo) return '未填写订单号/卡面编号，需人工核实';
-            if (e.manualStatus === 'pending') return (e.sheet === 'repeat' ? '重复填写问卷，请联系客服确认' : '需人工确认，请联系客服');
+            if (!e.matched) return '未匹配到订单，请联系客服';
+            if (e.ambiguous) return '同号多账号，请联系客服确认归属';
+            if (e.missingInfo) return '填写不完整，请联系客服';
+            if (e.manualStatus === 'pending') return (e.sheet === 'repeat' ? '重复填写问卷，请联系客服确认' : '待确认，请联系客服');
             if (e.sheet === 'repeat' && jizanStatusTextOf(e) !== '成功') return '重复填写问卷，请联系客服确认';
             return '手机号+订单号匹配成功';
         }
@@ -4840,13 +4880,13 @@
             });
             const tbody = document.getElementById('jizanFailBody');
             tbody.innerHTML = failRows.length > 0
-                ? failRows.map(f => `<tr><td>${f.sheet}</td><td>${f.key}</td><td>${f.card}</td><td>未匹配到用户</td></tr>`).join('')
+                ? failRows.map(f => `<tr><td>${f.sheet}</td><td>${f.key}</td><td>${f.card}</td><td>未匹配到订单，请联系客服</td></tr>`).join('')
                 : '<tr><td colspan="4" style="text-align:center;color:#999;">无匹配失败</td></tr>';
 
             const ambBody = document.getElementById('jizanAmbBody');
             if (ambBody) {
                 ambBody.innerHTML = ambiguousRows.length > 0
-                    ? ambiguousRows.map(e => `<tr><td>${sheetNames[e.sheet] || e.sheet}</td><td>${e.phone}</td><td>${e.orderNo}</td><td>${e.card}</td><td>${e.wechat}</td><td>${e.ambiguous ? (e.accounts && e.accounts.length > 1 ? '同号多账号：' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') : '同号多账号，订单号未命中') : ''}${e.missingInfo ? (e.ambiguous ? '；' : '') + '未填写订单号/卡面编号' : ''}</td></tr>`).join('')
+                    ? ambiguousRows.map(e => `<tr><td>${sheetNames[e.sheet] || e.sheet}</td><td>${e.phone}</td><td>${e.orderNo}</td><td>${e.card}</td><td>${e.wechat}</td><td>${e.ambiguous ? (e.accounts && e.accounts.length > 1 ? '同号多账号：' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') + '，请联系客服确认归属' : '同号多账号，请联系客服确认归属') : ''}${e.missingInfo ? (e.ambiguous ? '；' : '') + '填写不完整，请联系客服' : ''}</td></tr>`).join('')
                     : '<tr><td colspan="6" style="text-align:center;color:#999;">无待人工确认项</td></tr>';
             }
 
@@ -4856,7 +4896,7 @@
                 if (ambiguousRows.length > 30) msg += `\n...等共 ${ambiguousRows.length} 条`;
             }
             if (failRows.length > 0) {
-                msg += `\n\n匹配失败 ${failRows.length} 条：\n` + failRows.slice(0, 30).map(f => `${f.sheet}：${f.key}`).join('\n');
+                msg += `\n\n未匹配到订单（请联系客服）${failRows.length} 条：\n` + failRows.slice(0, 30).map(f => `${f.sheet}：${f.key}`).join('\n');
                 if (failRows.length > 30) msg += `\n...等共 ${failRows.length} 条`;
             }
             renderJizanDetail();
@@ -4870,11 +4910,12 @@
         // 处理状态：客服手动状态(manualStatus: success/pending/abnormal)优先，否则按原派生逻辑
         function jizanStatusTextOf(e) {
             if (e.manualStatus === 'success') return '成功';
-            if (e.manualStatus === 'pending') return '需人工确认，请联系客服';
+            if (e.manualStatus === 'pending') return '待确认，请联系客服';
             if (e.manualStatus === 'abnormal') return '异常，请联系客服';
-            if (!e.matched) return '失败';
+            if (!e.matched) return '未匹配到订单，请联系客服';
             if (e.sheet === 'fail') return '异常，请联系客服';
-            if (e.ambiguous || e.missingInfo) return '需人工确认，请联系客服';
+            if (e.ambiguous) return '同号多账号，请联系客服确认归属';
+            if (e.missingInfo) return '填写不完整，请联系客服';
             return '成功';
         }
         // 宣传集赞礼展示值：与「集赞汇总 / 主表 / 导出」同口径
@@ -4921,7 +4962,7 @@
                 ? '<tr><td colspan="9" style="text-align:center;color:#999;">暂无导入记录</td></tr>'
                 : rows.map((e, idx) => {
                     const st = jizanStatusTextOf(e);
-                    const stColor = st === '成功' ? '#059669' : (st.indexOf('异常') >= 0 || st === '失败' ? '#ef4444' : '#d97706');
+                    const stColor = st === '成功' ? '#059669' : (st.indexOf('异常') >= 0 || st.indexOf('未匹配到订单') >= 0 || st === '失败' ? '#ef4444' : '#d97706');
                     const mark = e.manuallyEdited ? ' <span style="color:#2563eb;font-size:11px;" title="修改时间：' + escAttr(e.editedAt || '') + (e.editedNote ? '；原因：' + escAttr(e.editedNote) : '') + '">✎已改</span>' : '';
                     const remark = String(e.note || '').trim();
                     const check = String(e.check || '').trim();
@@ -4947,7 +4988,7 @@
             const statusOpts = [
                 ['', '自动判定（按来源Sheet与匹配情况）'],
                 ['success', '成功（已确认可发放）'],
-                ['pending', '需人工确认（继续待核实）'],
+                ['pending', '待确认，请联系客服（继续待核实）'],
                 ['abnormal', '异常，不发放']
             ].map(o => `<option value="${o[0]}" ${(e.manualStatus || '') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('');
             const bodyHtml = `
@@ -4988,7 +5029,7 @@
             const cardNorm = normalizeCardId(card);
             if (status === 'success' && !cardNorm) { alert('状态为「成功」时必须填写有效卡面编号（如 SR12 / SSR8）'); return; }
             if (card && !cardNorm) { alert('卡面编号无法识别，请填写如 SR12 / SSR8；若确认不发放请留空'); return; }
-            const stTxt = m => m === 'success' ? '成功' : (m === 'pending' ? '需人工确认' : (m === 'abnormal' ? '异常，不发放' : '自动'));
+            const stTxt = m => m === 'success' ? '成功' : (m === 'pending' ? '待确认，请联系客服' : (m === 'abnormal' ? '异常，不发放' : '自动'));
             const oldStatus = e.manualStatus || '';
             const editedContent = [];
             const chk = (label, a, b) => { if (String(a) !== String(b)) editedContent.push(label + '：' + (a === '' ? '（空）' : a) + ' → ' + (b === '' ? '（空）' : b)); };
@@ -5058,22 +5099,22 @@
             if (!jizanExportData) { alert('请先导入集赞兑换表'); return; }
             const wb = XLSX.utils.book_new();
             const h1 = ['下单账号', '手机号', '宣传集赞礼'];
-            const d1 = userData.map(u => [u.wechat || '', u.phone || '', u.xuanchuanGift || '无']);
+            const d1 = userData.map(u => [u.wechat || '', u.phone || '', u.xuanchuanGift || '未参与']);
             const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1]);
             ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, ws1, '宣传集赞礼全量');
             const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '处理状态', '原因明细', '匹配用户', '宣传集赞礼', '备注'];
             const d2 = jizanExportData.map(e => {
                 let status = jizanStatusTextOf(e);
-                if (status === '失败') status = '失败，请联系客服';
+                if (status === '失败') status = '未匹配到订单，请联系客服';
                 const reason = jizanReasonTextOf(e);
                 let remark = '';
                 if (e.ambiguous) {
                     remark = e.accounts && e.accounts.length > 1
-                        ? '⚠ 同号多账号(' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') + ')，订单号未命中，请人工确认归属账号'
-                        : '⚠ 同号多账号，订单号未命中，请人工确认归属账号';
+                        ? '⚠ 同号多账号(' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') + ')，订单号未命中，请联系客服确认归属'
+                        : '⚠ 同号多账号，订单号未命中，请联系客服确认归属';
                 }
-                if (e.missingInfo) remark = (remark ? remark + '；' : '') + '未填写订单号/卡面编号，请人工核实';
+                if (e.missingInfo) remark = (remark ? remark + '；' : '') + '填写不完整，请联系客服';
                 if (e.sheet === 'fail' && (e.note || e.check)) remark = (remark ? remark + '；' : '') + '核查=' + (e.check || '-') + (e.note ? '，' + e.note : '');
                 if (e.manuallyEdited) remark = (remark ? remark + '；' : '') + '客服已修改(' + (e.editedAt || '') + ')' + (e.editedNote ? '：' + e.editedNote : '');
                 const giftDisp = jizanGiftDispOf(e);
@@ -5123,7 +5164,7 @@
 
             const giftHtml = user.xuanchuanGift && user.xuanchuanGift !== '无'
                 ? `<span style="color:#059669;font-weight:bold;">${user.xuanchuanGift}</span>`
-                : '<span style="color:#999;">无</span>';
+                : '<span style="color:#999;">未参与</span>';
 
             const mergedBadge = merged
                 ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:2px 10px;border-radius:10px;font-size:12px;margin-left:8px;" title="已按手机号聚合 ${(user.mergedFrom || []).join('、')}">已合并${(user.mergedFrom || []).length}个账号</span>`
