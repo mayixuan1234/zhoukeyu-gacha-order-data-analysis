@@ -72,6 +72,7 @@
         #userTable col.col-allbonus { width: 75px; }
         #userTable col.col-specialbonus { width: 75px; }
         #userTable col.col-xuanchuan { width: 65px; }
+        #userTable col.col-likeex { width: 90px; }
         #userTable col.col-limited { width: 75px; }
         #userTable col.col-buyou { width: 75px; }
         #userTable col.col-paytime { width: 75px; }
@@ -283,6 +284,79 @@
             <div id="jizanFileList" style="margin-top: 15px; color: #666;"></div>
         </div>
 
+        <div class="upload-section">
+            <div class="upload-box" id="likeUploadBox">
+                <div>🗂️</div>
+                <h3>上传超like兑换表</h3>
+                <p>支持 .xlsx、.xls 和 .csv 格式，单个文件（「按订单整理」表，Sheet「按订单合并」：A列CCL订单号、B列兑换卡编号，多卡用全角逗号分隔）</p>
+            </div>
+            <input type="file" id="likeFileInput" accept=".xlsx,.xls,.csv">
+            <button class="btn" id="likeAnalyzeBtn" disabled>开始导入</button>
+            <div id="likeFileList" style="margin-top: 15px; color: #666;"></div>
+            <div class="suika-rules" style="margin-top:14px;padding:10px 14px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;font-size:12px;color:#155e75;line-height:1.8;text-align:left;">
+                <b>📋 超like兑换卡面规则</b>
+                <div>按 CCL 订单号与主订单数据关联；同一账号多个订单命中时自动合并，按 R5×2、SSR7×1 形式汇总</div>
+                <div>未匹配到订单 / 同号多账号 / 填写不完整的记录，可在明细中点「修改」，由客服核实后调整归属与卡面</div>
+            </div>
+        </div>
+
+        <div id="likeResultSection" class="hidden">
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>🃏 超like兑换卡面导入结果</h3>
+                    <div>
+                        <button class="btn btn-sm" onclick="exportLikeResult()" title="导出超like兑换卡面结果Excel：含全量用户卡面、导入明细与修改记录Sheet">📥 导出超like兑换结果Excel</button>
+                    </div>
+                </div>
+                <div id="likeSummary"></div>
+            </div>
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>⚠️ 未匹配到订单列表（需私信核实身份）</h3>
+                </div>
+                <div class="table-wrapper">
+                    <table id="likeFailTable">
+                        <thead><tr><th>CCL订单号</th><th>兑换卡编号</th><th>卡面汇总</th><th>说明</th></tr></thead>
+                        <tbody id="likeFailBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>⚠️ 需人工确认列表（同订单号多账号）</h3>
+                </div>
+                <div class="table-wrapper">
+                    <table id="likeAmbTable">
+                        <thead><tr><th>CCL订单号</th><th>兑换卡编号</th><th>已匹配账号</th><th>说明</th></tr></thead>
+                        <tbody id="likeAmbBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="table-section">
+                <div class="table-header">
+                    <h3>📋 超like兑换记录明细（客服联系用户后可点「修改」直接调整）</h3>
+                    <span style="font-size:12px;color:#999;">修改后自动重算主表「超like兑换卡面」列与导出数据，并保留修改留痕</span>
+                </div>
+                <div class="table-wrapper" style="max-height:420px;">
+                    <table id="likeDetailTable">
+                        <thead><tr><th>CCL订单号</th><th>兑换卡编号</th><th>卡面汇总</th><th>处理状态</th><th>匹配用户</th><th>备注</th><th>操作</th></tr></thead>
+                        <tbody id="likeDetailBody"></tbody>
+                    </table>
+                </div>
+                <div class="table-section" style="margin-top:12px;">
+                    <div class="table-header">
+                        <h3 style="font-size:14px;margin:0;">📝 超like兑换修改历史（客服修改完整时间线）</h3>
+                    </div>
+                    <div class="table-wrapper" style="max-height:320px;">
+                        <table id="likeHistoryTable">
+                            <thead><tr><th>时间</th><th>CCL订单号</th><th>匹配用户</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
+                            <tbody id="likeHistoryBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="jizanResultSection" class="hidden">
             <div class="table-section">
                 <div class="table-header">
@@ -459,7 +533,7 @@
                         <colgroup>
                             <col class="col-account"><col class="col-phone"><col class="col-orders"><col class="col-orderno">
                             <col class="col-items"><col class="col-draws"><col class="col-duanhe"><col class="col-milestone">
-                            <col class="col-allbonus"><col class="col-specialbonus"><col class="col-xuanchuan">
+                            <col class="col-allbonus"><col class="col-specialbonus"><col class="col-likeex"><col class="col-xuanchuan">
                             <col class="col-limited"><col class="col-buyou">
                             <col class="col-paytime"><col class="col-romancedraws"><col class="col-romance">
                             <col class="col-weekendraws"><col class="col-weekend"><col class="col-finaldraws"><col class="col-final">
@@ -468,7 +542,7 @@
                             <tr>
                                 <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>货品</th><th>总抽数</th>
                                 <th>是否端盒</th><th>个人满抽礼</th>
-                                <th>超like卡</th><th>全员特典</th><th>宣传集赞礼</th>
+                                <th>超like卡</th><th>全员特典</th><th>超like兑换卡面</th><th>宣传集赞礼</th>
                                 <th>限时小卡获得</th>
                                 <th>补邮情况</th>
                                 <th>首次支付时间</th>
@@ -588,6 +662,10 @@
         const FINAL_START = new Date('2026-07-25T12:00:00');
         const FINAL_END = new Date('2026-07-31T17:17:00');
         const ACTIVITY_TOTAL_END = new Date('2026-07-31T17:17:00');
+
+        // 周末活动（Happy Hour）小卡的对外显示名：仅改展示/导出文案，内部键名（'周末随机' / '周末不重复'）、统计口径与判定逻辑保持不变
+        const WEEKEND_CARD_DISPLAY_NAME = { '周末随机': '柯舟求剑小卡随机', '周末不重复': '柯舟求剑小卡不重复' };
+        const activityCardDisplayNameOf = (cardType) => WEEKEND_CARD_DISPLAY_NAME[cardType] || cardType;
 
         let fileData = null, userData = [], cardStats = [], typeStats = [], activityStats = [], milestoneStats = [], finalCardTypeStats = [], activityCardStats = [];
         let currentPage = 1, pageSize = 20, filteredData = [];
@@ -1887,7 +1965,7 @@
             
             activityCardStatsBody.innerHTML = activityCardStats.map(card => `
                 <tr>
-                    <td>${card.cardType}</td>
+                    <td>${activityCardDisplayNameOf(card.cardType)}</td>
                     <td>${activityCardInfo[card.cardType] || card.cardType}</td>
                     <td>${card.count}</td>
                     <td>${card.users.size}</td>
@@ -1979,6 +2057,13 @@
                 const specialBonusBadge = user.specialBonus 
                     ? `<span style="color:#7c3aed;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.specialBonus}</span>` 
                     : '<span style="color:#999;font-size:11px;">-</span>';
+                // 超like兑换卡面显示（来源：按订单整理表按订单号关联；未命中订单红色提示，无记录显示 -）
+                const likeExTxt = String(user.likeExchangeCards || '').trim();
+                const likeBadge = likeExTxt
+                    ? (likeExTxt.indexOf('未匹配') >= 0 || likeExTxt.indexOf('请联系客服') >= 0
+                        ? `<span style="color:#ef4444;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${likeExTxt}</span>`
+                        : `<span style="color:#0f766e;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${likeExTxt}</span>`)
+                    : '<span style="color:#999;font-size:11px;">-</span>';
                 
                 // 补邮情况显示：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2012,6 +2097,7 @@
                     <td>${milestoneBadge}</td>
                     <td>${allMemberBadge}</td>
                     <td>${specialBonusBadge}</td>
+                    <td>${likeBadge}</td>
                     <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;max-width:320px;display:inline-block;white-space:normal;">${jizanGiftCustomerTextOf(user.xuanchuanGift)}</span>` : '<span style="color:#999;font-size:11px;">未参与</span>'}</td>
                     <td style="white-space:nowrap;">${limitedDetail}</td>
                     <td style="white-space:nowrap;">${buyouDetail}</td>
@@ -2024,7 +2110,7 @@
                     <td style="max-width:200px;">${user.finalCondition || '<span style="color:#999;font-size:11px;">-</span>'}</td>
                 </tr>
             `;
-            }).join('') : '<tr><td colspan="20" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            }).join('') : '<tr><td colspan="21" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -2148,7 +2234,7 @@
         }
 
         function exportUserSheet() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末随机', '周末不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '超like卡', '全员特典', '超like兑换卡面', '宣传集赞礼', '补邮情况', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '柯舟求剑小卡随机', '柯舟求剑小卡不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
             const data = filteredData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2166,7 +2252,7 @@
                 return [
                     (u._isMerged && u.mergedFrom ? u.mergedFrom.join('；') : (u.wechat || '')), u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                     u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
-                    u.allMemberBonus || '', u.specialBonus || '', jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与',
+                    u.allMemberBonus || '', u.specialBonus || '', likeExchangeTextOf(u), jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与',
                     buyouStr,
                     u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                     u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
@@ -2219,7 +2305,7 @@
                 '周末随机': '周末Happy Hour（7.18-7.20）随机1张',
                 '周末不重复': '周末Happy Hour（7.18-7.20）确定不重复'
             };
-            const data = activityCardStats.map(c => [c.cardType, activityCardInfo[c.cardType] || c.cardType, c.count, c.users.size]);
+            const data = activityCardStats.map(c => [activityCardDisplayNameOf(c.cardType), activityCardInfo[c.cardType] || c.cardType, c.count, c.users.size]);
             // 添加合计行
             const totalCount = activityCardStats.reduce((sum, c) => sum + c.count, 0);
             const totalUsers = new Set();
@@ -2361,7 +2447,7 @@
                 if (!m) return '-';
                 return Object.keys(m).map(card => card + '×' + m[card]).join('、');
             };
-            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '碎卡兑换审核状态', '审核原因明细', '成功兑换到的卡面', '用于兑换的卡', '备注'];
+            const headers = ['查询码(下单账号)', '下单账号', '收货人手机号', '总抽数', '是否端盒', '超like卡', '全员特典', '超like兑换卡面', '宣传集赞礼', '补邮情况', '限时小卡获得', '浪漫疯子获得', '周末活动获得', '终极活动获得', '获得卡片', '个人满抽礼', '碎卡兑换审核状态', '审核原因明细', '成功兑换到的卡面', '用于兑换的卡', '备注'];
             const data = userData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2429,6 +2515,7 @@
                     u.isDuanhe || '否',
                     u.allMemberBonus || '-',
                     u.specialBonus || '-',
+                    likeExchangeTextOf(u) || '-',
                     laibaoGiftTextOf(u.xuanchuanGift),
                     buyouStr,
                     limitedStr,
@@ -2450,7 +2537,7 @@
             });
             const sheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
             // 统一列宽（含「用于兑换的卡」），三处导出入口共用本函数即自动生效
-            sheet['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            sheet['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             return sheet;
         }
 
@@ -2459,7 +2546,7 @@
             if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
             const wb = XLSX.utils.book_new();
             const ws = exportLaibaoSheet();
-            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
             // 集赞修改记录 Sheet（复用集赞修改记录行数据；无集赞数据/无修改记录时写占位行，保证未匹配到 userData 的修改也可见）
             const { headers: jh5, data: jd5 } = buildJizanEditLogSheet();
@@ -4825,6 +4912,477 @@
             alert(`已保存并重新匹配审核：提交 ${code} → ${sub.audit.status}`);
         }
 
+        // ---------- 超like兑换卡面表上传 ----------
+        // 数据源：「按订单整理」表 Sheet「按订单合并」（A列CCL订单号、B列兑换卡编号，多卡以全角逗号分隔）
+        const LIKE_FAIL_GUIDE_TEXT = '未匹配到订单，请联系客服核实身份后重新提交';
+        const LIKE_AMB_GUIDE_TEXT = '同订单号多账号，请联系客服确认归属';
+        const LIKE_INCOMPLETE_GUIDE_TEXT = '填写不完整，请联系客服补充';
+        const LIKE_REJECT_GUIDE_TEXT = '审核未通过，请填写问题反馈问卷重新提交信息';
+        const LIKE_STATUS_LIST = ['通过', '未匹配到订单', '同号多账号', '填写不完整', '审核未通过'];
+        const LIKE_RARITY_RANK = { 'N': 1, 'R': 2, 'SR': 3, 'SSR': 4, 'SSSR': 5, 'UR': 6, 'LR': 7, 'PR': 8, 'SP': 9 };
+        let likeExchangeData = [];
+        let likeFile = null;
+
+        const likeUploadBox = document.getElementById('likeUploadBox');
+        const likeFileInput = document.getElementById('likeFileInput');
+        const likeAnalyzeBtn = document.getElementById('likeAnalyzeBtn');
+        const likeFileList = document.getElementById('likeFileList');
+
+        if (likeUploadBox && likeFileInput && likeAnalyzeBtn && likeFileList) {
+            likeUploadBox.addEventListener('click', () => likeFileInput.click());
+            likeUploadBox.addEventListener('dragover', (e) => { e.preventDefault(); likeUploadBox.classList.add('active'); });
+            likeUploadBox.addEventListener('dragleave', () => likeUploadBox.classList.remove('active'));
+            likeUploadBox.addEventListener('drop', (e) => {
+                e.preventDefault();
+                likeUploadBox.classList.remove('active');
+                if (e.dataTransfer.files.length > 0) setLikeFile(e.dataTransfer.files[0]);
+            });
+            likeFileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) setLikeFile(e.target.files[0]); });
+
+            likeAnalyzeBtn.addEventListener('click', async () => {
+                if (!likeFile) return;
+                if (!rawOrdersData || rawOrdersData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导入'); return; }
+                likeAnalyzeBtn.disabled = true;
+                try {
+                    const buf = await likeFile.arrayBuffer();
+                    let wb;
+                    if (likeFile.name.toLowerCase().endsWith('.csv')) {
+                        wb = XLSX.read(new TextDecoder('GBK').decode(new Uint8Array(buf)), { type: 'string' });
+                    } else {
+                        wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+                    }
+                    if (window.__marvisEnqueueBackup) { window.__marvisEnqueueBackup(likeFile); window.__marvisFlushBackup(); } // 解析成功即自动备份原文件
+                    const likePrevData = Array.isArray(likeExchangeData) ? likeExchangeData.slice() : [];
+                    const parsed = parseLikeWorkbook(wb);
+                    if (!parsed.rows.length) { alert('未在「' + (parsed.sheetName || '首个Sheet') + '」中读取到有效数据，请确认表内 A 列为 CCL 订单号、B 列为兑换卡编号'); return; }
+                    applyLikeRows(parsed);
+                    // 重传/换批次时把本地已有的人工处理结果（人工状态/修改历史/人工指定归属）按 CCL订单号 贴回新行
+                    likePreserveManual(likePrevData, likeExchangeData);
+                    replayLikeExchangeToUsers();
+                    renderLikeResultAll();
+                    document.getElementById('likeResultSection').classList.remove('hidden');
+                    document.getElementById('likeResultSection').scrollIntoView({ behavior: 'smooth' });
+                    // 与集赞口径一致：重导只更新本地页面并保留人工成果，确认无误后手动点「保存到云端」
+                } catch (err) {
+                    alert('超like兑换表解析失败：' + (err && err.message ? err.message : err));
+                } finally {
+                    likeAnalyzeBtn.disabled = false;
+                }
+            });
+        }
+
+        function setLikeFile(file) {
+            likeFile = file;
+            if (likeFileList) likeFileList.innerHTML = `<span style="background:#f0f0f0;padding:4px 12px;border-radius:12px;font-size:13px;">📄 ${escHtml(file.name)}</span>`;
+            if (likeAnalyzeBtn) likeAnalyzeBtn.disabled = false;
+        }
+
+        // 卡面编号归一：'ssr07' → 'SSR7'（复用主表 normalizeCardId，再做前导零去除，避免同一卡面被拆成两类）
+        function likeNormCardId(raw) {
+            const t = String(raw || '').trim();
+            if (!t) return '';
+            const std = (typeof normalizeCardId === 'function') ? normalizeCardId(t) : '';
+            const m1 = std ? std.match(/^(SSSR|SSR|SR|R|N)(\d+)$/) : null;
+            if (m1) return m1[1] + String(parseInt(m1[2], 10));
+            const m2 = t.toUpperCase().replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\s+/g, '').match(/^([A-Z]{1,4})[\-_#]?0*(\d+)$/);
+            if (m2) return m2[1] + String(parseInt(m2[2], 10));
+            return t.toUpperCase().replace(/[\s,，、]+/g, '');
+        }
+
+        // 单元格文本 → 计数对象：'SSR7，R42，R5' → { SSR7:1, R42:1, R5:1 }；'R5，R5' → { R5:2 }
+        function likeParseCardCounts(text) {
+            const counts = {};
+            String(text || '').split(/[，,、;；\/|\s]+/).forEach(function (tok) {
+                const id = likeNormCardId(tok);
+                if (!id) return;
+                counts[id] = (counts[id] || 0) + 1;
+            });
+            return counts;
+        }
+
+        // 排序：稀有度升序 → 同稀有度按编号数值升序
+        function likeCountsSort(ids) {
+            return ids.slice().sort(function (a, b) {
+                const ma = a.match(/^([A-Z]+)(\d+)$/) || [null, a, ''];
+                const mb = b.match(/^([A-Z]+)(\d+)$/) || [null, b, ''];
+                const ra = LIKE_RARITY_RANK[ma[1]] || 99;
+                const rb = LIKE_RARITY_RANK[mb[1]] || 99;
+                if (ra !== rb) return ra - rb;
+                if (ma[1] !== mb[1]) return ma[1] < mb[1] ? -1 : 1;
+                const na = ma[2] === '' ? 0 : parseInt(ma[2], 10);
+                const nb = mb[2] === '' ? 0 : parseInt(mb[2], 10);
+                return na - nb;
+            });
+        }
+
+        // 计数对象 → 展示文本：'R5×2、SSR7×1'
+        function likeCountsText(counts) {
+            if (!counts) return '';
+            const ids = Object.keys(counts).filter(function (k) { return counts[k] > 0; });
+            if (!ids.length) return '';
+            return likeCountsSort(ids).map(function (id) { return counts[id] > 1 ? (id + '×' + counts[id]) : id; }).join('、');
+        }
+
+        function likeMergeCounts(dst, src) {
+            Object.keys(src || {}).forEach(function (k) { dst[k] = (dst[k] || 0) + src[k]; });
+            return dst;
+        }
+
+        // 页面「超like兑换卡面」列 / 导出 统一取数口径
+        function likeExchangeTextOf(u) {
+            if (!u) return '';
+            return String(u.likeExchangeCards || '').trim();
+        }
+
+        // 订单号归一：去空格/分隔符与 CCL 前缀、统一大写，避免「CCL123」与「123」被视为不同订单
+        function likeNormOrderNo(s) {
+            return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^CCL/, '');
+        }
+
+        // 按订单号在主订单数据中定位账号（userData[].orderNos 为 ';' 分隔字符串）
+        function likeUsersByOrderNo(orderNo) {
+            const key = likeNormOrderNo(orderNo);
+            if (!key) return [];
+            if (typeof userData === 'undefined' || !Array.isArray(userData)) return [];
+            const hitExact = [];
+            const hitFuzzy = [];
+            userData.forEach(function (x) {
+                const nos = String(x.orderNos || '').split(';').map(likeNormOrderNo).filter(Boolean);
+                let exact = false, fuzzy = false;
+                nos.forEach(function (n) {
+                    if (n === key) { exact = true; return; }
+                    if (key.length >= 6 && n.length >= 6) {
+                        if (n.indexOf(key) >= 0 || key.indexOf(n) >= 0) fuzzy = true;
+                    }
+                });
+                if (exact) hitExact.push(x);
+                else if (fuzzy) hitFuzzy.push(x);
+            });
+            return hitExact.length ? hitExact : hitFuzzy;
+        }
+
+        // 解析「按订单整理」工作簿：优先 Sheet「按订单合并」，A列订单号、B列卡编号
+        function parseLikeWorkbook(wb) {
+            const rows = [];
+            const names = wb.SheetNames || [];
+            let sn = names.find(function (n) { return n.indexOf('按订单合并') >= 0; });
+            if (!sn) sn = names.find(function (n) { return n.indexOf('订单') >= 0; });
+            if (!sn) sn = names[0];
+            if (!sn) return { rows: rows, sheetName: '' };
+            const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' });
+            let start = 0;
+            if (aoa.length > 0 && /订单|卡/.test(String((aoa[0] || []).join('|')))) start = 1;
+            for (let i = start; i < aoa.length; i++) {
+                const r = aoa[i] || [];
+                const orderNo = String(r[0] || '').trim();
+                const cardText = String(r[1] || '').trim();
+                if (!orderNo && !cardText) continue;
+                rows.push({ orderNo: orderNo, cardText: cardText });
+            }
+            return { rows: rows, sheetName: sn };
+        }
+
+        // 审核状态（三态 + 审核未通过；客服人工指定优先）
+        function likeStatusTextOf(e) {
+            if (!e) return '';
+            if (e.manualStatus) return e.manualStatus;
+            if (!String(e.orderNo || '').trim() || !likeCountsText(e.cardCounts)) return '填写不完整';
+            if (e.matched && e.ambiguous) return '同号多账号';
+            if (e.matched) return '通过';
+            return '未匹配到订单';
+        }
+
+        function likeReasonTextOf(e) {
+            const st = likeStatusTextOf(e);
+            if (st === '通过') return '订单号已命中主表';
+            if (st === '同号多账号') return LIKE_AMB_GUIDE_TEXT;
+            if (st === '未匹配到订单') return LIKE_FAIL_GUIDE_TEXT;
+            if (st === '填写不完整') return LIKE_INCOMPLETE_GUIDE_TEXT;
+            return LIKE_REJECT_GUIDE_TEXT;
+        }
+
+        function likeCountsOfStatus(st) {
+            if (st === '通过' || st === '同号多账号') return true;
+            return false;
+        }
+
+        // 导入结果 → 记录数组（重匹配主表 + 三态判定）
+        function applyLikeRows(parsed) {
+            likeExchangeData = [];
+            (parsed.rows || []).forEach(function (row) {
+                const counts = likeParseCardCounts(row.cardText);
+                const missingInfo = !String(row.orderNo || '').trim() || !likeCountsText(counts);
+                const hits = likeUsersByOrderNo(row.orderNo);
+                const ambiguous = hits.length > 1;
+                likeExchangeData.push({
+                    orderNo: row.orderNo,
+                    cardText: row.cardText,
+                    cardCounts: counts,
+                    matched: hits.length > 0,
+                    ambiguous: ambiguous,
+                    missingInfo: missingInfo,
+                    accounts: hits.map(function (x) { return x.wechat; }).filter(Boolean),
+                    wechat: hits.length ? (hits[0].wechat || '') : '',
+                    matchedKey: hits.length ? (ambiguous ? '订单号(同订单多账号)' : '订单号') : '',
+                    manualStatus: '', manuallyEdited: false, editedAt: '', editedNote: '', editedContent: '',
+                    likeHistory: []
+                });
+            });
+        }
+
+        // 记录 → 主表用户列（同一账号多订单自动合并汇总）
+        function replayLikeExchangeToUsers() {
+            if (typeof userData === 'undefined' || !Array.isArray(userData)) return;
+            userData.forEach(function (u) { u.likeExchangeCards = ''; u.likeExchangeCounts = null; });
+            const byWechat = {};
+            likeExchangeData.forEach(function (e) {
+                const w = String(e.wechat || '').trim();
+                if (!w) return;
+                if (likeStatusTextOf(e) !== '通过') return; // 未匹配/同号多账号/不完整/未通过 不计入用户列，避免误算
+                if (!byWechat[w]) byWechat[w] = {};
+                likeMergeCounts(byWechat[w], e.cardCounts || {});
+            });
+            userData.forEach(function (u) {
+                const c = byWechat[String(u.wechat || '').trim()];
+                if (c) { u.likeExchangeCounts = c; u.likeExchangeCards = likeCountsText(c); }
+            });
+            try { filteredData = [...userData]; renderTable(1); } catch (e) {}
+        }
+
+        function renderLikeResultAll() {
+            renderLikeSummary();
+            renderLikeDetail();
+            renderLikeHistory();
+        }
+
+        function renderLikeSummary() {
+            const el = document.getElementById('likeSummary');
+            if (!el) return;
+            const total = likeExchangeData.length;
+            let pass = 0, fail = 0, amb = 0, inc = 0, rej = 0;
+            const cardTotals = {};
+            likeExchangeData.forEach(function (e) {
+                const st = likeStatusTextOf(e);
+                if (st === '通过') { pass++; likeMergeCounts(cardTotals, e.cardCounts || {}); }
+                else if (st === '未匹配到订单') fail++;
+                else if (st === '同号多账号') amb++;
+                else if (st === '填写不完整') inc++;
+                else rej++;
+            });
+            const chip = function (bg, fg, txt) { return '<span style="background:' + bg + ';color:' + fg + ';padding:6px 12px;border-radius:6px;font-size:13px;">' + txt + '</span>'; };
+            el.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">'
+                + chip('#ecfdf5', '#047857', '✅ 通过 ' + pass)
+                + chip('#fef2f2', '#b91c1c', '❌ 未匹配到订单 ' + fail)
+                + chip('#fffbeb', '#b45309', '⚠ 同号多账号 ' + amb)
+                + chip('#f5f3ff', '#6d28d9', '⚠ 填写不完整 ' + inc)
+                + chip('#f1f5f9', '#475569', '⊘ 审核未通过 ' + rej)
+                + chip('#eff6ff', '#1d4ed8', '合计 ' + total + ' 条')
+                + '</div>'
+                + '<div style="font-size:12px;color:#334155;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;">'
+                + '已确认可兑换卡面合计（仅统计通过）：<b style="color:#0f766e;">' + (likeCountsText(cardTotals) || '-') + '</b>'
+                + '</div>';
+        }
+
+        function renderLikeDetail() {
+            const body = document.getElementById('likeDetailBody');
+            if (!body) return;
+            if (!likeExchangeData.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">暂无数据</td></tr>'; return; }
+            body.innerHTML = likeExchangeData.map(function (e, i) {
+                const st = likeStatusTextOf(e);
+                const color = st === '通过' ? '#047857' : (st === '同号多账号' || st === '填写不完整' ? '#b45309' : (st === '审核未通过' ? '#64748b' : '#b91c1c'));
+                const remark = [];
+                if (e.ambiguous) remark.push('命中 ' + (e.accounts || []).length + ' 个账号');
+                if (e.manualStatus) remark.push('客服已改状态：' + e.manualStatus);
+                if (e.manuallyEdited) remark.push('客服已修改(' + (e.editedAt || '') + ')' + (e.editedNote ? '：' + e.editedNote : ''));
+                return '<tr>'
+                    + '<td>' + escHtml(e.orderNo || '') + '</td>'
+                    + '<td>' + escHtml(e.cardText || '') + '</td>'
+                    + '<td style="font-weight:bold;color:#0f766e;">' + (likeCountsText(e.cardCounts) || '<span style="color:#999;">-</span>') + '</td>'
+                    + '<td style="color:' + color + ';font-weight:bold;">' + st + '</td>'
+                    + '<td>' + (e.wechat ? escHtml(e.wechat) : '<span style="color:#999;">-</span>') + '</td>'
+                    + '<td style="font-size:12px;color:#666;">' + (remark.length ? escHtml(remark.join('；')) : '<span style="color:#999;">-</span>') + '</td>'
+                    + '<td><button class="btn btn-sm" onclick="likeOpenEdit(' + i + ')">修改</button></td>'
+                    + '</tr>';
+            }).join('');
+            // 未匹配 / 待确认两个清单
+            const failBody = document.getElementById('likeFailBody');
+            if (failBody) {
+                const fails = likeExchangeData.filter(function (e) { const st = likeStatusTextOf(e); return st === '未匹配到订单' || st === '填写不完整'; });
+                failBody.innerHTML = fails.length ? fails.map(function (e) {
+                    return '<tr><td>' + escHtml(e.orderNo || '') + '</td><td>' + escHtml(e.cardText || '') + '</td><td>' + (likeCountsText(e.cardCounts) || '-') + '</td><td style="color:#b91c1c;">' + likeReasonTextOf(e) + '</td></tr>';
+                }).join('') : '<tr><td colspan="4" style="text-align:center;color:#999;">无</td></tr>';
+            }
+            const ambBody = document.getElementById('likeAmbBody');
+            if (ambBody) {
+                const ambs = likeExchangeData.filter(function (e) { return likeStatusTextOf(e) === '同号多账号'; });
+                ambBody.innerHTML = ambs.length ? ambs.map(function (e) {
+                    return '<tr><td>' + escHtml(e.orderNo || '') + '</td><td>' + escHtml(e.cardText || '') + '</td><td>' + escHtml((e.accounts || []).join('、')) + '</td><td style="color:#b45309;">' + LIKE_AMB_GUIDE_TEXT + '</td></tr>';
+                }).join('') : '<tr><td colspan="4" style="text-align:center;color:#999;">无</td></tr>';
+            }
+        }
+
+        function renderLikeHistory() {
+            const body = document.getElementById('likeHistoryBody');
+            if (!body) return;
+            const rows = [];
+            likeExchangeData.forEach(function (e) {
+                (e.likeHistory || []).forEach(function (h) {
+                    rows.push({ at: h.at || '', orderNo: e.orderNo || '', wechat: h.wechat || e.wechat || '', type: h.type || '', content: h.content || '', note: h.note || '' });
+                });
+            });
+            rows.sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+            body.innerHTML = rows.length ? rows.map(function (r) {
+                return '<tr><td>' + escHtml(r.at) + '</td><td>' + escHtml(r.orderNo) + '</td><td>' + escHtml(r.wechat) + '</td><td>' + escHtml(r.type) + '</td><td style="color:#334155;">' + escHtml(r.content) + '</td><td style="color:#666;">' + escHtml(r.note) + '</td></tr>';
+            }).join('') : '<tr><td colspan="6" style="text-align:center;color:#999;">暂无修改记录</td></tr>';
+        }
+
+        // 重传基础表时保留本地人工成果（按 CCL订单号 对齐，防重导洗白）
+        function likePreserveManual(oldList, newBase) {
+            if (!Array.isArray(oldList) || !Array.isArray(newBase)) return;
+            const byKey = {};
+            newBase.forEach(function (ne) { if (ne) { const k = String(ne.orderNo || '').trim(); if (k && !(k in byKey)) byKey[k] = ne; } });
+            const copyField = function (src, dst, key) {
+                if (src && dst && src[key] !== undefined && src[key] !== null) {
+                    try { dst[key] = Array.isArray(src[key]) ? src[key].slice() : src[key]; } catch (e) {}
+                }
+            };
+            oldList.forEach(function (oe) {
+                if (!oe) return;
+                const ne = byKey[String(oe.orderNo || '').trim()];
+                if (!ne) return;
+                ['likeHistory', 'manualStatus', 'manuallyEdited', 'editedNote', 'editedAt', 'editedContent'].forEach(function (k) { copyField(oe, ne, k); });
+                // 客服人工指定过归属账号的保留归属，避免重导打回「未匹配/待确认」（仅限显式人工编辑过的行）
+                if (oe.manuallyEdited && oe.wechat) {
+                    ne.wechat = oe.wechat;
+                    ne.matched = true;
+                    if (oe.matchedKey === '客服人工指定') ne.matchedKey = '客服人工指定';
+                    if (!oe.manualStatus) { ne.ambiguous = false; ne.accounts = []; }
+                    if (oe.cardText) { ne.cardText = oe.cardText; ne.cardCounts = likeParseCardCounts(oe.cardText); }
+                }
+            });
+        }
+
+        // 客服修改弹窗（动态创建，避免改动 HTML 结构）
+        function likeEnsureEditModal() {
+            let m = document.getElementById('likeEditModal');
+            if (m) return m;
+            m = document.createElement('div');
+            m.id = 'likeEditModal';
+            m.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:9999;';
+            m.innerHTML = '<div style="background:#fff;border-radius:10px;padding:18px 20px;width:560px;max-width:92vw;max-height:86vh;overflow:auto;box-shadow:0 12px 32px rgba(0,0,0,.25);">'
+                + '<h3 style="margin:0 0 4px;font-size:16px;">修改超like兑换记录</h3>'
+                + '<div id="likeEditMeta" style="font-size:12px;color:#64748b;margin-bottom:12px;"></div>'
+                + '<div style="display:grid;grid-template-columns:110px 1fr;gap:10px 12px;font-size:13px;align-items:center;">'
+                + '<label>处理状态</label><select id="likeEditStatus" class="input" style="padding:6px 8px;">' + LIKE_STATUS_LIST.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') + '</select>'
+                + '<label>匹配账号</label><input id="likeEditWechat" class="input" style="padding:6px 8px;" placeholder="填写需归属的下单账号(wechat)">'
+                + '<label>兑换卡面</label><input id="likeEditCard" class="input" style="padding:6px 8px;" placeholder="如：R5×2、SSR7×1">'
+                + '<label>备注</label><input id="likeEditNote" class="input" style="padding:6px 8px;" placeholder="给用户看的处理说明">'
+                + '<label>修改原因</label><input id="likeEditReason" class="input" style="padding:6px 8px;" placeholder="内部留痕用（可空）">'
+                + '</div>'
+                + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">'
+                + '<button class="btn btn-sm" id="likeEditCancel">取消</button>'
+                + '<button class="btn btn-sm" id="likeEditSave">保存</button>'
+                + '</div></div>';
+            document.body.appendChild(m);
+            m.addEventListener('click', function (ev) { if (ev.target === m) m.style.display = 'none'; });
+            document.getElementById('likeEditCancel').addEventListener('click', function () { m.style.display = 'none'; });
+            document.getElementById('likeEditSave').addEventListener('click', likeSaveEdit);
+            return m;
+        }
+
+        function likeOpenEdit(idx) {
+            const e = likeExchangeData[idx];
+            if (!e) return;
+            const m = likeEnsureEditModal();
+            m.dataset.idx = String(idx);
+            document.getElementById('likeEditMeta').textContent = 'CCL订单号：' + (e.orderNo || '-') + '　原始兑换卡编号：' + (e.cardText || '-') + '　当前状态：' + likeStatusTextOf(e);
+            document.getElementById('likeEditStatus').value = likeStatusTextOf(e);
+            document.getElementById('likeEditWechat').value = e.wechat || '';
+            document.getElementById('likeEditCard').value = e.cardText || '';
+            document.getElementById('likeEditNote').value = e.editedNote || '';
+            document.getElementById('likeEditReason').value = '';
+            m.style.display = 'flex';
+        }
+
+        function likeSaveEdit() {
+            const m = document.getElementById('likeEditModal');
+            if (!m) return;
+            const idx = parseInt(m.dataset.idx, 10);
+            const e = likeExchangeData[idx];
+            if (!e) { m.style.display = 'none'; return; }
+            const st = document.getElementById('likeEditStatus').value;
+            const wechat = document.getElementById('likeEditWechat').value.trim();
+            const cardText = document.getElementById('likeEditCard').value.trim();
+            const note = document.getElementById('likeEditNote').value.trim();
+            const reason = document.getElementById('likeEditReason').value.trim();
+            const at = new Date().toLocaleString('zh-CN');
+            const oldSt = likeStatusTextOf(e);
+            const changes = [];
+            if (st !== oldSt) changes.push('状态 ' + oldSt + ' → ' + st);
+            if (wechat !== (e.wechat || '')) changes.push('匹配账号 ' + (e.wechat || '-') + ' → ' + (wechat || '-'));
+            if (cardText !== (e.cardText || '')) changes.push('卡面 ' + (e.cardText || '-') + ' → ' + (cardText || '-'));
+            if (note !== (e.editedNote || '')) changes.push('备注：' + (note || '-'));
+            if (!changes.length) { m.style.display = 'none'; return; }
+            const counts = likeParseCardCounts(cardText);
+            e.cardText = cardText;
+            e.cardCounts = counts;
+            e.manualStatus = st;
+            e.wechat = wechat;
+            if (st === '通过') { e.matched = true; e.ambiguous = false; e.missingInfo = false; if (wechat) e.matchedKey = '客服人工指定'; }
+            else if (st === '同号多账号') { e.matched = true; e.ambiguous = true; }
+            else if (st === '未匹配到订单') { e.matched = false; e.ambiguous = false; }
+            else if (st === '填写不完整') { e.missingInfo = true; }
+            else if (st === '审核未通过') { e.matched = false; e.ambiguous = false; }
+            e.manuallyEdited = true;
+            e.editedAt = at;
+            e.editedNote = note;
+            e.editedContent = changes.join('；');
+            if (!Array.isArray(e.likeHistory)) e.likeHistory = [];
+            e.likeHistory.push({ at: at, type: '客服修改', content: changes.join('；'), note: reason, wechat: wechat });
+            replayLikeExchangeToUsers();
+            renderLikeResultAll();
+            m.style.display = 'none';
+            try { if (typeof queueCloudSave === 'function') queueCloudSave(); } catch (e2) {}
+        }
+
+        // 导出：明细 + 按账号汇总 + 修改记录
+        function exportLikeResult() {
+            if (!likeExchangeData || !likeExchangeData.length) { alert('暂无可导出的超like兑换数据，请先上传「按订单整理」表'); return; }
+            const wb = XLSX.utils.book_new();
+            const h1 = ['CCL订单号', '兑换卡编号', '卡面汇总', '处理状态', '匹配用户', '备注'];
+            const d1 = likeExchangeData.map(function (e) {
+                const remark = [];
+                if (likeStatusTextOf(e) !== '通过') remark.push(likeReasonTextOf(e));
+                if (e.manualStatus) remark.push('客服已改状态：' + e.manualStatus);
+                if (e.manuallyEdited) remark.push('客服已修改(' + (e.editedAt || '') + ')' + (e.editedNote ? '：' + e.editedNote : ''));
+                return [e.orderNo, e.cardText, likeCountsText(e.cardCounts), likeStatusTextOf(e), e.wechat || '', remark.join('；')];
+            });
+            const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1]);
+            ws1['!cols'] = [{ wch: 20 }, { wch: 32 }, { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 46 }];
+            XLSX.utils.book_append_sheet(wb, ws1, '超like兑换明细');
+
+            const h2 = ['下单账号', '手机号', '订单号', '超like兑换卡面'];
+            const d2 = (typeof userData !== 'undefined' && Array.isArray(userData) ? userData : [])
+                .filter(function (u) { return String(u.likeExchangeCards || '').trim(); })
+                .map(function (u) { return [u.wechat || '', u.phone || '', u.orderNos || '', likeExchangeTextOf(u)]; });
+            const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2]);
+            ws2['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 34 }, { wch: 26 }];
+            XLSX.utils.book_append_sheet(wb, ws2, '按账号汇总');
+
+            const h3 = ['时间', 'CCL订单号', '匹配用户', '操作类型', '修改内容', '原因'];
+            const d3 = [];
+            likeExchangeData.forEach(function (e) {
+                (e.likeHistory || []).forEach(function (h) {
+                    d3.push([h.at || '', e.orderNo || '', h.wechat || e.wechat || '', h.type || '', h.content || '', h.note || '']);
+                });
+            });
+            const ws3 = XLSX.utils.aoa_to_sheet([h3, ...d3]);
+            ws3['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 60 }, { wch: 30 }];
+            XLSX.utils.book_append_sheet(wb, ws3, '超like兑换修改记录');
+
+            XLSX.writeFile(wb, getTimestampFilename('超like兑换卡面结果'));
+        }
+
         // ---------- 集赞兑换表上传 ----------
         const jizanUploadBox = document.getElementById('jizanUploadBox');
         const jizanFileInput = document.getElementById('jizanFileInput');
@@ -5251,7 +5809,7 @@
             const ws4 = userData && userData.length > 0
                 ? exportLaibaoSheet()
                 : XLSX.utils.aoa_to_sheet([['未上传主数据，无法生成来豹接龙查询表']]);
-            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws4, '来豹接龙查询表');
             // 集赞修改记录：所有被客服修改过的集赞记录，每行一次修改（时间正序）——复用独立构造函数
             const { headers: h5, data: d5 } = buildJizanEditLogSheet();
@@ -5533,6 +6091,7 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             upd(o.editedAt); upd(o.updatedAt); upd(o.releasedAt); upd(o.manualEditedAt);
             if (o.audit) { upd(o.audit.releasedAt); upd(o.audit.editedAt); upd(o.audit.updatedAt); upd(o.audit.at); }
             (o.suikaHistory || []).forEach(function (h) { upd(h.at); });
+            (o.likeHistory || []).forEach(function (h) { upd(h.at); });
             if (Array.isArray(o.requests)) o.requests.forEach(function (r) { const n = cloudRowTime(r); if (n > best) best = n; });
             return best;
         }
@@ -5565,7 +6124,8 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                     submissions: cloudSanitizeSubmissions(typeof suikaSubmissions !== 'undefined' ? suikaSubmissions : []),
                     rawCache: (typeof suikaRawDataCache !== 'undefined') ? suikaRawDataCache : null
                 },
-                jizan: { exportData: (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData : [] }
+                jizan: { exportData: (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData : [] },
+                like: { rows: (typeof likeExchangeData !== 'undefined' && Array.isArray(likeExchangeData)) ? likeExchangeData : [] }
             };
         }
 
@@ -5574,6 +6134,7 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 // 仅记录小表：6.8万行主订单本地导入不上云，也不作为“可保存”依据（避免误传空记录清空云端）
                 if (typeof suikaSubmissions !== 'undefined' && suikaSubmissions && suikaSubmissions.length) return true;
                 if (typeof jizanExportData !== 'undefined' && jizanExportData && jizanExportData.length) return true;
+                if (typeof likeExchangeData !== 'undefined' && likeExchangeData && likeExchangeData.length) return true;
             } catch (e) {}
             return false;
         }
@@ -5600,8 +6161,8 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                         const ret = await cloudApplySnapshot(remote);
                         if (ret && !ret.empty && ret.stats) {
                             const st = ret.stats;
-                            const n = (st.suikaAdd || 0) + (st.jizanAdd || 0);
-                            const u = (st.suikaUpd || 0) + (st.jizanUpd || 0);
+                            const n = (st.suikaAdd || 0) + (st.jizanAdd || 0) + (st.likeAdd || 0);
+                            const u = (st.suikaUpd || 0) + (st.jizanUpd || 0) + (st.likeUpd || 0);
                             if (n + u > 0) mergeInfo = '（已并入云端他人记录 新增' + n + '/更新' + u + '）';
                         }
                     }
@@ -5637,10 +6198,11 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             if (!snap || typeof snap !== 'object') return { ok: true, empty: true };
             const suikaList = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions : [];
             const jizanList = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData : [];
+            const likeList = snap.like && Array.isArray(snap.like.rows) ? snap.like.rows : [];
             const v1Main = snap.main && Array.isArray(snap.main.rawOrders) && snap.main.rawOrders.length ? snap.main.rawOrders : [];
-            if (!v1Main.length && !suikaList.length && !jizanList.length) return { ok: true, empty: true };
+            if (!v1Main.length && !suikaList.length && !jizanList.length && !likeList.length) return { ok: true, empty: true };
 
-            const stats = { suikaAdd: 0, suikaUpd: 0, suikaConflict: 0, jizanAdd: 0, jizanUpd: 0, jizanConflict: 0 };
+            const stats = { suikaAdd: 0, suikaUpd: 0, suikaConflict: 0, jizanAdd: 0, jizanUpd: 0, jizanConflict: 0, likeAdd: 0, likeUpd: 0, likeConflict: 0 };
 
             // 兼容 v1 老快照：本地未导主订单时才导入，已导订单绝不覆盖（订单大表本地为准）
             if (v1Main.length && (!(typeof rawOrdersData !== 'undefined') || !rawOrdersData || !rawOrdersData.length)) {
@@ -5736,6 +6298,33 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 const jsr = document.getElementById('jizanResultSection');
                 if (jsr) jsr.classList.remove('hidden');
             }
+            // 3) 超like兑换卡面记录合并：同一条 = CCL订单号（行内含 manualStatus/人工修改历史，随行同步）
+            if (likeList.length) {
+                if (!Array.isArray(likeExchangeData)) likeExchangeData = [];
+                const lk = function (e) { return String(e.orderNo || '').trim(); };
+                const idxLike = {};
+                likeExchangeData.forEach(function (e, i) { if (e) { const k = lk(e); if (k && !(k in idxLike)) idxLike[k] = i; } });
+                const mergedLike = likeExchangeData.slice();
+                likeList.forEach(function (ce) {
+                    if (!ce || typeof ce !== 'object') return;
+                    const k = lk(ce);
+                    if (!k) return;
+                    const li = (k in idxLike) ? idxLike[k] : -1;
+                    if (li < 0) { mergedLike.push(ce); stats.likeAdd++; return; }
+                    const lr = mergedLike[li];
+                    if (cloudRowSigOf(lr) === cloudRowSigOf(ce)) return;
+                    const lt = cloudRowTime(lr), ct = cloudRowTime(ce);
+                    if (lt && ct && lt !== ct) stats.likeConflict++;
+                    const pick = cloudPickNewerRow(lr, ce);
+                    mergedLike[li] = pick.row;
+                    stats.likeUpd++;
+                });
+                likeExchangeData = mergedLike;
+                try { replayLikeExchangeToUsers(); } catch (e7) {}
+                try { renderLikeResultAll(); } catch (e8) {}
+                const lrs = document.getElementById('likeResultSection');
+                if (lrs) lrs.classList.remove('hidden');
+            }
             return { ok: true, empty: false, stats: stats, time: snap.updatedAt || '', by: snap.updatedBy || '' };
         }
 
@@ -5817,9 +6406,9 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 const ret = await cloudApplySnapshot(snap);
                 if (ret.empty) { cloudStatusPill('云端暂无已保存数据'); cloudLogPush('云端暂无已保存数据'); return; }
                 const st = ret.stats || {};
-                const totalNew = (st.suikaAdd || 0) + (st.jizanAdd || 0);
-                const totalUpd = (st.suikaUpd || 0) + (st.jizanUpd || 0);
-                const totalCf = (st.suikaConflict || 0) + (st.jizanConflict || 0);
+                const totalNew = (st.suikaAdd || 0) + (st.jizanAdd || 0) + (st.likeAdd || 0);
+                const totalUpd = (st.suikaUpd || 0) + (st.jizanUpd || 0) + (st.likeUpd || 0);
+                const totalCf = (st.suikaConflict || 0) + (st.jizanConflict || 0) + (st.likeConflict || 0);
                 cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）');
                 cloudSetSource(ret.by || '', ret.time || '');
                 cloudLogPush('拉取合并云端记录：来源账号 ' + (ret.by || '-') + '（更新于 ' + (ret.time || '-') + '），新增 ' + totalNew + '/更新 ' + totalUpd + ' 条', 'ok');
@@ -5827,6 +6416,7 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                     alert('云端记录已合并到当前页面（更新于 ' + (ret.time || '-') + '，账号 ' + (ret.by || '-') + '）：\n' +
                         '· 碎卡审核：新增 ' + (st.suikaAdd || 0) + ' 条、更新 ' + (st.suikaUpd || 0) + ' 条\n' +
                         '· 集赞礼兑：新增 ' + (st.jizanAdd || 0) + ' 条、更新 ' + (st.jizanUpd || 0) + ' 条\n' +
+                        '· 超like兑换：新增 ' + (st.likeAdd || 0) + ' 条、更新 ' + (st.likeUpd || 0) + ' 条\n' +
                         (totalCf ? '· 两端都修改过、已按较新者保留 ' + totalCf + ' 条\n' : '') +
                         '只增改不删除，本地未被云端覆盖的记录均保留。');
                 } else if (totalNew + totalUpd > 0) {
@@ -5993,11 +6583,12 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 }
                 const suikaCount = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions.length : 0;
                 const jizanCount = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData.length : 0;
-                if (!suikaCount && !jizanCount) { cloudStatusPill('云端暂无记录数据'); cloudLogPush('云端暂无记录数据'); return; }
+                const likeCount = snap.like && Array.isArray(snap.like.rows) ? snap.like.rows.length : 0;
+                if (!suikaCount && !jizanCount && !likeCount) { cloudStatusPill('云端暂无记录数据'); cloudLogPush('云端暂无记录数据'); return; }
                 // 阶段1：概要询问（可跳过）
                 const want = await cloudMergeDialog({ onCreated: function (c) {
                     c.setTitle('云端发现上一班记录，是否合并？');
-                    c.setBody('来源账号：' + (snap.updatedBy || '-') + '\n保存时间：' + (snap.updatedAt || '-' ) + '\n云端记录：碎卡审核 ' + suikaCount + ' 条、集赞礼兑 ' + jizanCount + ' 条\n\n合并规则：只增改、不删除本地记录；同一条记录两端都改过时，保留修改时间较晚的一方。\n\n可跳过：本地已有较新数据或想稍后再合并，可点「暂不合并」，之后在右上角手动拉取。');
+                    c.setBody('来源账号：' + (snap.updatedBy || '-') + '\n保存时间：' + (snap.updatedAt || '-' ) + '\n云端记录：碎卡审核 ' + suikaCount + ' 条、集赞礼兑 ' + jizanCount + ' 条、超like兑换 ' + likeCount + ' 条\n\n合并规则：只增改、不删除本地记录；同一条记录两端都改过时，保留修改时间较晚的一方。\n\n可跳过：本地已有较新数据或想稍后再合并，可点「暂不合并」，之后在右上角手动拉取。');
                     c.setButtons([{ label: '暂不合并', value: 'skip' }, { label: '开始合并', value: 'go', primary: true }]);
                 } });
                 if (want !== 'go') { cloudStatusPill('已跳过云端记录合并（可点右上角手动拉取）'); cloudLogPush('已跳过云端记录合并（可稍后手动拉取）'); return; }
@@ -6010,11 +6601,12 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                         try {
                             const ret = await cloudApplySnapshot(snap);
                             const st = ret.stats || {};
-                            const sum = (st.suikaAdd || 0) + (st.suikaUpd || 0) + (st.jizanAdd || 0) + (st.jizanUpd || 0);
+                            const sum = (st.suikaAdd || 0) + (st.suikaUpd || 0) + (st.jizanAdd || 0) + (st.jizanUpd || 0) + (st.likeAdd || 0) + (st.likeUpd || 0);
                             c.setTitle('合并完成');
                             c.setBody('碎卡审核：新增 ' + (st.suikaAdd || 0) + ' 条、更新 ' + (st.suikaUpd || 0) + ' 条\n' +
                                 '集赞礼兑：新增 ' + (st.jizanAdd || 0) + ' 条、更新 ' + (st.jizanUpd || 0) + ' 条\n' +
-                                (((st.suikaConflict || 0) + (st.jizanConflict || 0)) ? '两端都改过、已按较新者保留 ' + ((st.suikaConflict || 0) + (st.jizanConflict || 0)) + ' 条\n' : '') +
+                                '超like兑换：新增 ' + (st.likeAdd || 0) + ' 条、更新 ' + (st.likeUpd || 0) + ' 条\n' +
+                                (((st.suikaConflict || 0) + (st.jizanConflict || 0) + (st.likeConflict || 0)) ? '两端都改过、已按较新者保留 ' + ((st.suikaConflict || 0) + (st.jizanConflict || 0) + (st.likeConflict || 0)) + ' 条\n' : '') +
                                 '\n' + (sum > 0 ? '本地记录只增改、未删除任何数据。\n本班可继续导入新数据或直接导出。' : '本地记录已是最新，无需变化。'));
                             c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
                             if (sum === 0) { cloudStatusPill('云端记录与本地一致'); cloudLogPush('云端记录与本地一致，无需合并', 'ok'); }
@@ -6715,6 +7307,46 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             }
         }
 
+        // 演示数据：超like兑换卡面（结构对齐「按订单整理」解析结果，程序化随机合成、无真实信息；复用 applyLikeRows 匹配与三态判定链）
+        function cloudGenDemoLike() {
+            if (typeof userData === 'undefined' || !Array.isArray(userData) || !userData.length) return { total: 0 };
+            const rnd = (function () { let s = 20260914; return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();
+            const pickCard = function () {
+                const r = rnd();
+                if (r < 0.25) return 'SSR' + (1 + Math.floor(rnd() * 30));
+                if (r < 0.75) return 'R' + (1 + Math.floor(rnd() * 60));
+                return 'SR' + (1 + Math.floor(rnd() * 52));
+            };
+            const cands = userData.filter(function (u) { return String(u.orderNos || '').trim(); });
+            const rows = [];
+            // 1) 通过组：订单号命中主表，卡面 1~3 张
+            const nHit = Math.min(10, cands.length);
+            for (let i = 0; i < nHit; i++) {
+                const u = cands[Math.floor(rnd() * cands.length)];
+                const orderNo = String(u.orderNos || '').split(';')[0] || '';
+                if (!orderNo) continue;
+                const n = 1 + Math.floor(rnd() * 3);
+                const cards = [];
+                for (let k = 0; k < n; k++) cards.push(pickCard());
+                rows.push({ orderNo: orderNo, cardText: cards.join('，') });
+            }
+            // 2) 未匹配组：订单号不在主表
+            rows.push({ orderNo: '88888888888888', cardText: 'R5，SSR7' });
+            rows.push({ orderNo: '99999999999999', cardText: 'SSR1' });
+            // 3) 填写不完整组：卡面为空
+            if (rows.length) rows.push({ orderNo: rows[0].orderNo, cardText: '' });
+            // 4) 同号多账号组：让两个演示账号共用同一（示例）订单号
+            if (cands.length >= 2) {
+                const shared = 'D2026071199999';
+                cands[0].orderNos = String(cands[0].orderNos || '') + ';' + shared;
+                cands[1].orderNos = String(cands[1].orderNos || '') + ';' + shared;
+                rows.push({ orderNo: shared, cardText: 'SSR7，R5' });
+            }
+            applyLikeRows({ rows: rows });
+            replayLikeExchangeToUsers();
+            return { total: (typeof likeExchangeData !== 'undefined' && likeExchangeData) ? likeExchangeData.length : 0 };
+        }
+
         // 演示入口：进入演示态 -> 程序化生成随机订单 -> 复用现有渲染链完整展示
         async function cloudEnterDemo() {
             cloudDemoMode = true;
@@ -6758,9 +7390,17 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 if (jr) jr.classList.remove('hidden');
                 try { filteredData = [...userData]; renderTable(1); } catch (eTbl) {}
             } catch (eJizan) { console.error('演示集赞数据生成失败', eJizan); }
+            let likeStat = { total: 0 };
+            try {
+                likeStat = cloudGenDemoLike();
+                const lr = document.getElementById('likeResultSection');
+                if (lr) lr.classList.remove('hidden');
+                try { filteredData = [...userData]; renderTable(1); } catch (eTbl2) {}
+                try { renderLikeResultAll(); } catch (eLr2) {}
+            } catch (eLike) { console.error('演示超like兑换数据生成失败', eLike); }
             setTimeout(function () { try { Object.values(charts).forEach(function (c) { c.resize(); }); } catch (e2) {} }, 120);
-            cloudLogPush('已进入演示模式：随机订单 ' + rawOrdersData.length + ' 行 / 演示用户 ' + userData.length + ' 人，碎卡提交 ' + suikaStat.total + ' 条（通过 ' + suikaStat.pass + '/待人工 ' + suikaStat.handle + '/未找到 ' + suikaStat.notFound + '），集赞记录 ' + jizanStat.total + ' 条（数据为本地生成，未访问云端）', 'ok');
-            if (cloudPillStatusEl) cloudPillStatusEl.textContent = '｜演示数据已生成（订单 ' + rawOrdersData.length + ' 行 · 碎卡 ' + suikaStat.total + ' · 集赞 ' + jizanStat.total + '）· 未连接云端';
+            cloudLogPush('已进入演示模式：随机订单 ' + rawOrdersData.length + ' 行 / 演示用户 ' + userData.length + ' 人，碎卡提交 ' + suikaStat.total + ' 条（通过 ' + suikaStat.pass + '/待人工 ' + suikaStat.handle + '/未找到 ' + suikaStat.notFound + '），集赞记录 ' + jizanStat.total + ' 条，超like兑换 ' + likeStat.total + ' 条（数据为本地生成，未访问云端）', 'ok');
+            if (cloudPillStatusEl) cloudPillStatusEl.textContent = '｜演示数据已生成（订单 ' + rawOrdersData.length + ' 行 · 碎卡 ' + suikaStat.total + ' · 集赞 ' + jizanStat.total + ' · 超like兑换 ' + likeStat.total + '）· 未连接云端';
         }
 
         // ---------- 初始化：先登录门禁，token 有效则探测云端 ----------
