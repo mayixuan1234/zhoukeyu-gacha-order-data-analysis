@@ -5058,7 +5058,46 @@
                 if (exact) hitExact.push(x);
                 else if (fuzzy) hitFuzzy.push(x);
             });
-            return hitExact.length ? hitExact : hitFuzzy;
+            if (hitExact.length || hitFuzzy.length) return hitExact.length ? hitExact : hitFuzzy;
+            // 优化20260913：userData 只汇总有效订单（有奖品/端盒/已开奖卡片/补邮），
+            // 纯盲盒（未开奖）订单在 processData 中被过滤，超like兑换表的订单可能正落在被过滤行上。
+            // 回退到 rawOrdersData（全部原始行）按订单号找下单账号，再映射回 userData 用户。
+            return likeUsersByRawOrderNo(key);
+        }
+
+        // 优化20260913新增：在原始订单数据（含被过滤的盲盒订单）中按订单号定位账号并映射回 userData。
+        // 仅当订单在原始数据中可查到、且该下单账号在 userData 中存在时才返回用户；
+        // 若账号完全只有盲盒订单（无任何有效订单），userData 中不存在该账号，返回 []，
+        // 由调用方通过 likeRawOrderExists 单独标记"原始数据中查到但无有效抽卡记录"。
+        function likeUsersByRawOrderNo(key) {
+            if (typeof rawOrdersData === 'undefined' || !Array.isArray(rawOrdersData) || !rawOrdersData.length) return [];
+            const wechats = [];
+            const seen = {};
+            rawOrdersData.forEach(function (row) {
+                const rawNo = String(row['订单编号'] || row['订单号'] || '').trim();
+                const n = likeNormOrderNo(rawNo);
+                if (!n) return;
+                const exact = n === key;
+                const fuzzy = (key.length >= 6 && n.length >= 6) && (n.indexOf(key) >= 0 || key.indexOf(n) >= 0);
+                if (!(exact || fuzzy)) return;
+                const w = String(row['下单账号'] || row['账号'] || '').trim();
+                if (w && !seen[w]) { seen[w] = true; wechats.push(w); }
+            });
+            if (!wechats.length) return [];
+            return userData.filter(function (u) { return wechats.indexOf(String(u.wechat || '').trim()) >= 0; });
+        }
+
+        // 优化20260913新增：仅在原始订单数据中按订单号查是否存在（含被过滤的盲盒订单），
+        // 用于"未匹配到用户但订单真实存在"的提示，便于客服核实而非直接判为无记录。
+        function likeRawOrderExists(orderNo) {
+            const key = likeNormOrderNo(orderNo);
+            if (!key) return false;
+            if (typeof rawOrdersData === 'undefined' || !Array.isArray(rawOrdersData) || !rawOrdersData.length) return false;
+            return rawOrdersData.some(function (row) {
+                const n = likeNormOrderNo(String(row['订单编号'] || row['订单号'] || '').trim());
+                if (!n) return false;
+                return n === key || (key.length >= 6 && n.length >= 6 && (n.indexOf(key) >= 0 || key.indexOf(n) >= 0));
+            });
         }
 
         // 解析「按订单整理」工作簿：优先 Sheet「按订单合并」，A列订单号、B列卡编号
@@ -5096,7 +5135,7 @@
             const st = likeStatusTextOf(e);
             if (st === '通过') return '订单号已命中主表';
             if (st === '同号多账号') return LIKE_AMB_GUIDE_TEXT;
-            if (st === '未匹配到订单') return LIKE_FAIL_GUIDE_TEXT;
+            if (st === '未匹配到订单') return e.rawHit ? '订单号在原始数据中查到，但该账号无有效抽卡记录（疑似仅盲盒下单未开奖），请联系客服核实' : LIKE_FAIL_GUIDE_TEXT;
             if (st === '填写不完整') return LIKE_INCOMPLETE_GUIDE_TEXT;
             return LIKE_REJECT_GUIDE_TEXT;
         }
@@ -5114,6 +5153,9 @@
                 const missingInfo = !String(row.orderNo || '').trim() || !likeCountsText(counts);
                 const hits = likeUsersByOrderNo(row.orderNo);
                 const ambiguous = hits.length > 1;
+                // 优化20260913：订单在原始数据（含盲盒订单）中真实存在但未映射到有效用户时标记 rawHit，
+                // 用于提示"订单真实存在、账号可能仅有盲盒下单"，避免客服误判为查无此单。
+                const rawHit = !(hits.length > 0) && likeRawOrderExists(row.orderNo);
                 likeExchangeData.push({
                     orderNo: row.orderNo,
                     cardText: row.cardText,
@@ -5121,6 +5163,7 @@
                     matched: hits.length > 0,
                     ambiguous: ambiguous,
                     missingInfo: missingInfo,
+                    rawHit: rawHit,
                     accounts: hits.map(function (x) { return x.wechat; }).filter(Boolean),
                     wechat: hits.length ? (hits[0].wechat || '') : '',
                     matchedKey: hits.length ? (ambiguous ? '订单号(同订单多账号)' : '订单号') : '',
@@ -5191,6 +5234,7 @@
                 const st = likeStatusTextOf(e);
                 const color = st === '通过' ? '#047857' : (st === '同号多账号' || st === '填写不完整' ? '#b45309' : (st === '审核未通过' ? '#64748b' : '#b91c1c'));
                 const remark = [];
+                if (e.rawHit && !e.matched) remark.push('原始数据中查到该订单，但该账号无有效抽卡记录（疑似仅盲盒下单未开奖），需人工核实');
                 if (e.ambiguous) remark.push('命中 ' + (e.accounts || []).length + ' 个账号');
                 if (e.manualStatus) remark.push('客服已改状态：' + e.manualStatus);
                 if (e.manuallyEdited) remark.push('客服已修改(' + (e.editedAt || '') + ')' + (e.editedNote ? '：' + e.editedNote : ''));
