@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.9.13 10:50</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.9.13 11:20</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.9.13 10:50</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.9.13 11:20</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -2063,7 +2063,7 @@
                     ? (likeExTxt.indexOf('未匹配') >= 0 || likeExTxt.indexOf('请联系客服') >= 0
                         ? `<span style="color:#ef4444;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${likeExTxt}</span>`
                         : `<span style="color:#0f766e;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${likeExTxt}</span>`)
-                    : '<span style="color:#999;font-size:11px;">-</span>';
+                    : '<span style="color:#999;font-size:11px;">未参与</span>';
                 
                 // 补邮情况显示：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2252,7 +2252,7 @@
                 return [
                     (u._isMerged && u.mergedFrom ? u.mergedFrom.join('；') : (u.wechat || '')), u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                     u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
-                    u.allMemberBonus || '', u.specialBonus || '', likeExchangeTextOf(u), jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与',
+                    u.allMemberBonus || '', u.specialBonus || '', likeExchangeTextOf(u) || '未参与', jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与',
                     buyouStr,
                     u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                     u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
@@ -2515,7 +2515,7 @@
                     u.isDuanhe || '否',
                     u.allMemberBonus || '-',
                     u.specialBonus || '-',
-                    likeExchangeTextOf(u) || '-',
+                    likeExchangeTextOf(u) || '未参与',
                     laibaoGiftTextOf(u.xuanchuanGift),
                     buyouStr,
                     limitedStr,
