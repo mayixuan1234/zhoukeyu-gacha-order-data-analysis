@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.9.13 11:20</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.9.3 11:50</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -72,7 +72,6 @@
         #userTable col.col-allbonus { width: 75px; }
         #userTable col.col-specialbonus { width: 75px; }
         #userTable col.col-xuanchuan { width: 65px; }
-        #userTable col.col-likeex { width: 90px; }
         #userTable col.col-limited { width: 75px; }
         #userTable col.col-buyou { width: 75px; }
         #userTable col.col-paytime { width: 75px; }
@@ -152,7 +151,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.9.13 11:20</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.9.3 11:50</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -164,6 +163,13 @@
             </div>
             <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple>
             <button class="btn" id="analyzeBtn" disabled>开始分析</button>
+            <label style="margin-left:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
+                活动判定时间：
+                <select id="judgeModeSel" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;">
+                    <option value="mixed" selected>混合（下单/支付/开奖任一都算）</option>
+                    <option value="pay">仅按支付时间</option>
+                </select>
+            </label>
             <div id="analysisProgressArea" class="hidden" style="margin-top:12px;width:100%;">
                 <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px;"><span>分析进度</span><span id="analysisProgressText">准备中...</span></div>
                 <div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;"><div id="analysisProgressBar" style="height:100%;width:0%;background:#2563eb;border-radius:8px;transition:width .15s ease;"></div></div>
@@ -187,10 +193,10 @@
                 <div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;"><div id="suikaProgressBar" style="height:100%;width:0%;background:#20517d;border-radius:8px;transition:width .15s ease;"></div></div>
             </div>
             <label style="margin-left:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
-                <input type="checkbox" id="suikaMergePhoneCb" checked style="accent-color:#20517d;cursor:pointer;"> 审核时按手机号聚合多账号（详情展示保持原样）
+                <input type="checkbox" id="suikaMergePhoneCb" style="accent-color:#20517d;cursor:pointer;"> 审核时按手机号聚合多账号（默认关闭＝按下单账号独立判定，符合活动规则）
             </label>
             <label style="margin-left:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
-                <input type="checkbox" id="suikaMergeMultiCb" checked style="accent-color:#20517d;cursor:pointer;"> 按手机号聚合所有提交合并核算（同一手机号所有提交整体判定）
+                <input type="checkbox" id="suikaMergeMultiCb" style="accent-color:#20517d;cursor:pointer;"> 按手机号聚合所有提交合并核算（默认关闭＝按下单账号独立判定）
             </label>
             <div class="suika-rules" style="margin-top:14px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e;line-height:1.8;text-align:left;">
                 <b>📋 碎卡兑换规则（「周柯宇 fully unlocked」爱意正值炽夏🍃小卡抽抽乐·非酋机制）</b>
@@ -228,13 +234,13 @@
                     <table id="suikaSubmitSummaryTable">
                         <colgroup>
                             <col style="width:70px;"><col style="width:80px;"><col style="width:95px;"><col style="width:60px;">
-                            <col style="width:110px;"><col style="width:160px;"><col style="width:100px;"><col style="width:54px;"><col style="width:130px;"><col style="width:130px;">
+                            <col style="width:110px;"><col style="width:160px;"><col style="width:100px;"><col style="width:130px;"><col style="width:130px;">
                         </colgroup>
                         <thead>
                             <tr>
                                 <th>提交编号</th><th>昵称</th><th>手机号</th><th>请求数</th>
                                 <th>换入汇总</th><th>用于兑换的卡(汇总)</th>
-                                <th>审核结果</th><th>✎已改</th><th>原因汇总</th><th>操作</th>
+                                <th>审核结果</th><th>原因汇总</th><th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="suikaSubmitSummaryBody"></tbody>
@@ -247,13 +253,13 @@
                     <table id="suikaResultTable">
                         <colgroup>
                             <col style="width:70px;"><col style="width:50px;"><col style="width:80px;"><col style="width:95px;"><col style="width:50px;"><col style="width:70px;">
-                            <col style="width:110px;"><col style="width:150px;"><col style="width:100px;"><col style="width:54px;"><col style="width:130px;"><col style="width:150px;">
+                            <col style="width:110px;"><col style="width:150px;"><col style="width:100px;"><col style="width:130px;"><col style="width:150px;">
                         </colgroup>
                         <thead>
                             <tr>
                                 <th>提交编号</th><th>请求</th><th>昵称</th><th>手机号</th><th>总抽数</th>
                                 <th>兑换类型</th><th>换入卡面</th><th>用于兑换的卡</th>
-                                <th>审核结果</th><th>✎已改</th><th>原因明细</th><th>操作</th>
+                                <th>审核结果</th><th>原因明细</th><th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="suikaResultBody"></tbody>
@@ -265,7 +271,7 @@
                     </div>
                     <div class="table-wrapper" style="max-height:320px;">
                         <table id="suikaHistoryTable">
-                            <thead><tr><th>时间</th><th>昵称</th><th>手机号</th><th>提交编号</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
+                            <thead><tr><th>时间</th><th>手机号</th><th>提交编号</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
                             <tbody id="suikaHistoryBody"></tbody>
                         </table>
                     </div>
@@ -343,6 +349,7 @@
                         <tbody id="likeDetailBody"></tbody>
                     </table>
                 </div>
+            </div>
                 <div class="table-section" style="margin-top:12px;">
                     <div class="table-header">
                         <h3 style="font-size:14px;margin:0;">📝 超like兑换修改历史（客服修改完整时间线）</h3>
@@ -354,8 +361,8 @@
                         </table>
                     </div>
                 </div>
-            </div>
         </div>
+
 
         <div id="jizanResultSection" class="hidden">
             <div class="table-section">
@@ -411,7 +418,7 @@
                     </div>
                     <div class="table-wrapper" style="max-height:320px;">
                         <table id="jizanHistoryTable">
-                            <thead><tr><th>时间</th><th>昵称</th><th>手机号</th><th>来源Sheet</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
+                            <thead><tr><th>时间</th><th>手机号</th><th>来源Sheet</th><th>操作类型</th><th>修改内容</th><th>原因</th></tr></thead>
                             <tbody id="jizanHistoryBody"></tbody>
                         </table>
                     </div>
@@ -533,7 +540,7 @@
                         <colgroup>
                             <col class="col-account"><col class="col-phone"><col class="col-orders"><col class="col-orderno">
                             <col class="col-items"><col class="col-draws"><col class="col-duanhe"><col class="col-milestone">
-                            <col class="col-allbonus"><col class="col-specialbonus"><col class="col-likeex"><col class="col-xuanchuan">
+                            <col class="col-allbonus"><col class="col-specialbonus"><col class="col-xuanchuan">
                             <col class="col-limited"><col class="col-buyou">
                             <col class="col-paytime"><col class="col-romancedraws"><col class="col-romance">
                             <col class="col-weekendraws"><col class="col-weekend"><col class="col-finaldraws"><col class="col-final">
@@ -542,7 +549,7 @@
                             <tr>
                                 <th>下单账号</th><th>手机号</th><th>订单数</th><th>订单号</th><th>货品</th><th>总抽数</th>
                                 <th>是否端盒</th><th>个人满抽礼</th>
-                                <th>超like卡</th><th>全员特典</th><th>超like兑换卡面</th><th>宣传集赞礼</th>
+                                <th>超like卡</th><th>全员特典</th><th>宣传集赞礼</th>
                                 <th>限时小卡获得</th>
                                 <th>补邮情况</th>
                                 <th>首次支付时间</th>
@@ -562,90 +569,6 @@
     </div>
 
     <script>
-        // ===== 全局错误提示 + 数据安全兜底（2026-09-07 体检修复）=====
-        (function () {
-            var toastEl = null;
-            function ensureToast() {
-                if (toastEl && document.body.contains(toastEl)) return toastEl;
-                toastEl = document.createElement('div');
-                toastEl.style.cssText = 'position:fixed;top:22px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#20517d,#4f84b8);color:#fff;padding:11px 20px;border-radius:8px;font-size:14px;z-index:99999;box-shadow:0 6px 20px rgba(0,0,0,.28);opacity:0;transition:opacity .3s;pointer-events:none;max-width:86%;text-align:center;line-height:1.5;';
-                document.body.appendChild(toastEl);
-                return toastEl;
-            }
-            function showToastMsg(msg) {
-                var el = ensureToast();
-                el.textContent = msg;
-                el.style.opacity = '1';
-                clearTimeout(el._t);
-                el._t = setTimeout(function () { el.style.opacity = '0'; }, 5000);
-            }
-            window.addEventListener('error', function (e) {
-                try { showToastMsg('页面出现错误：' + ((e && e.message) || '未知错误') + (e && e.lineno ? '（行 ' + e.lineno + '）' : '')); } catch (_) {}
-            });
-            window.addEventListener('unhandledrejection', function (e) {
-                try { var r = e && e.reason; showToastMsg('操作未完成：' + ((r && r.message) || '未知错误')); } catch (_) {}
-            });
-            // ---- 原文件自动备份兜底 ----
-            var B = window.__marvisBackup = { pending: [], noticeEl: null, doneOnce: {} };
-            function tsSuffix() { var d = new Date(); var p = function (n) { return (n < 10 ? '0' : '') + n; }; return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()); }
-            function enqueueBackup(item) {
-                if (!item || !item.name) return;
-                var isFile = (typeof Blob !== 'undefined' && item instanceof Blob);
-                if (isFile) { if (!/\.(xlsx|xls|csv)$/i.test(item.name)) return; }
-                else { if (!/\.(xlsx|xls)$/i.test(item.name)) return; }  // fileDataList 内 CSV 已解码，不做字节备份
-                if (B.doneOnce[item.name] || B.pending.some(function (x) { return x.name === item.name; })) return;
-                B.pending.push({ name: item.name, src: item });
-            }
-            function downloadOne(it) {
-                var blob;
-                if (it.src instanceof Blob) { blob = it.src; }
-                else if (it.src && it.src.data instanceof Uint8Array) { blob = new Blob([it.src.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); }
-                else if (it.src && it.src.data !== undefined) { blob = new Blob([it.src.data]); }
-                else { return false; }
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = '备份_' + it.name.replace(/\.(xlsx|xls|csv)$/i, '') + '_' + tsSuffix() + (function (n) { var m = /\.(xlsx|xls|csv)$/i.exec(n); return m ? m[0].toLowerCase() : '.xlsx'; })(it.name);
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-                return true;
-            }
-            function showBackupNotice(msg, retryItems) {
-                var old = B.noticeEl;
-                if (old && old.parentNode) old.parentNode.removeChild(old);
-                var box = document.createElement('div');
-                box.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:linear-gradient(135deg,#20517d,#4f84b8);color:#fff;padding:12px 18px;border-radius:8px;font-size:14px;z-index:99998;box-shadow:0 6px 20px rgba(0,0,0,.3);max-width:88%;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;line-height:1.5;';
-                var span = document.createElement('span');
-                span.textContent = msg;
-                box.appendChild(span);
-                if (retryItems && retryItems.length > 0) {
-                    var btn = document.createElement('button');
-                    btn.textContent = '重新下载备份(' + retryItems.length + ')';
-                    btn.style.cssText = 'background:#fff;color:#20517d;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;';
-                    btn.addEventListener('click', function () { flushBackup(true); });
-                    box.appendChild(btn);
-                } else {
-                    clearTimeout(box._t);
-                    box._t = setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 8000);
-                }
-                document.body.appendChild(box);
-                B.noticeEl = box;
-            }
-            function flushBackup() {
-                var pend = B.pending;
-                if (pend.length === 0) return;
-                var ok = 0, fail = [];
-                for (var i = 0; i < pend.length; i++) { if (downloadOne(pend[i])) { ok++; B.doneOnce[pend[i].name] = 1; } else fail.push(pend[i]); }
-                var total = pend.length;
-                B.pending = fail;
-                if (fail.length === 0) { showBackupNotice('已自动下载备份，请妥善保存（共 ' + total + ' 个文件）', null); }
-                else { showBackupNotice('已自动下载备份，请妥善保存（成功 ' + ok + ' / ' + total + '，部分可能被浏览器拦截）', fail); }
-            }
-            window.__marvisEnqueueBackup = enqueueBackup;
-            window.__marvisFlushBackup = flushBackup;
-        })();
         const ACTIVITY_START = new Date('2026-07-11T17:20:00');
         // 第一小时截止时间增加5分钟缓冲（18:25），考虑支付延迟
         const ACTIVITY_1H_END = new Date(ACTIVITY_START.getTime() + 65 * 60 * 1000);
@@ -655,17 +578,23 @@
         const ACTIVITY_24H_END = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000 + 5 * 60 * 1000);
         const ROMANCE_START = new Date('2026-07-13T12:00:00');
         const ROMANCE_END = new Date('2026-07-15T18:00:00');
-        // 周末Happy Hour限时福利（柯舟求剑白瓷小卡）
+        // 周末Happy Hour限时福利（周末活动小卡）
         const WEEKEND_START = new Date('2026-07-18T12:00:00');
         const WEEKEND_END = new Date('2026-07-20T18:00:00');
+        // 周末Happy Hour小卡显示名映射：仅用于面向用户可见文案
+        // 内部键名'周末随机'/'周末不重复'及统计聚合、赠卡判定逻辑均保持不变
+        const WEEKEND_CARD_DISPLAY = { '周末随机': '周末活动随机', '周末不重复': '周末活动不重复' };
         // 收官终极活动
         const FINAL_START = new Date('2026-07-25T12:00:00');
         const FINAL_END = new Date('2026-07-31T17:17:00');
         const ACTIVITY_TOTAL_END = new Date('2026-07-31T17:17:00');
-
-        // 周末活动（Happy Hour）小卡的对外显示名：仅改展示/导出文案，内部键名（'周末随机' / '周末不重复'）、统计口径与判定逻辑保持不变
-        const WEEKEND_CARD_DISPLAY_NAME = { '周末随机': '柯舟求剑小卡随机', '周末不重复': '柯舟求剑小卡不重复' };
-        const activityCardDisplayNameOf = (cardType) => WEEKEND_CARD_DISPLAY_NAME[cardType] || cardType;
+        // 20260924 新增：活动判定时间口径（混合判定默认开启：支付时间或开奖时间任一在活动范围内即算）
+        let JUDGE_MODE = 'mixed';
+        function inRange(t, st, en) { return !!t && t >= st && t <= en; }
+        function matchPeriod(t1, t2, t3, st, en) {
+            if (JUDGE_MODE === 'mixed') return inRange(t1, st, en) || inRange(t2, st, en) || inRange(t3, st, en);
+            return inRange(t1, st, en);
+        }
 
         let fileData = null, userData = [], cardStats = [], typeStats = [], activityStats = [], milestoneStats = [], finalCardTypeStats = [], activityCardStats = [];
         let currentPage = 1, pageSize = 20, filteredData = [];
@@ -698,6 +627,7 @@
                 // 检查是否已存在相同文件名的文件（去重）
                 const exists = fileDataList.some(f => f.name === file.name);
                 if (exists) {
+                    console.log(`文件已存在，跳过: ${file.name}`);
                     return;
                 }
                 
@@ -772,16 +702,18 @@
                         // Excel文件解析
                         const workbook = XLSX.read(fileDataList[i].data, { type: 'array' });
                         df = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                        window.__marvisEnqueueBackup(fileDataList[i]); // 解析成功即排队原文件备份
                     }
                     
                     // 调试：显示前两行数据的列名
                     if (df.length > 0 && i === 0) {
+                        console.log('=== 数据预览（前两行）===');
+                        console.log('列名:', Object.keys(df[0]));
+                        console.log('第一行:', df[0]);
+                        if (df.length > 1) console.log('第二行:', df[1]);
                     }
                     
                     allData = allData.concat(df);
                 }
-                window.__marvisFlushBackup();
                 
                 rawOrdersData = allData;
                 await processData(allData);
@@ -795,7 +727,7 @@
                 document.getElementById('analysisProgressArea').classList.add('hidden');
                 resultSection.classList.remove('hidden');
                 setTimeout(() => { Object.values(charts).forEach(c => c.resize()); }, 100);
-                // 主订单大表本地导入不上云，不触发云端保存（避免误把无小表记录的空状态写回云端）
+                queueCloudSave();
             } catch (error) {
                 alert('解析文件失败：' + error.message);
                 loadingSection.classList.add('hidden');
@@ -821,6 +753,10 @@
                 <tr>${displayHeaders.map(h => `<td>${row[h] !== undefined ? String(row[h]).substring(0, 30) : ''}</td>`).join('')}</tr>
             `).join('');
             
+            console.log('=== 所有列名 ===');
+            console.log(headers);
+            console.log('=== 前3行数据 ===');
+            console.log(previewRows);
         }
 
         function getCardType(cardName) {
@@ -881,33 +817,12 @@
         }
 
         async function processData(df) {
+            const modeSel = document.getElementById('judgeModeSel');
+            JUDGE_MODE = (modeSel && modeSel.value) || 'mixed';
             const cardData = [], orderData = [];
-
-            // ===== 修复：按「订单编号 + 商品行」对输入行去重 =====
-            // 背景：同一笔订单可能同时出现在「主表」「补邮表」等多个来源文件中，
-            //       旧逻辑直接 concat 后全量统计，导致补邮订单被重复累加（显示"已补邮*2"）。
-            // 规则：去重键 = 订单编号 + 商品行集合（订单描述按 ';' 拆分、trim、排序后拼接）；
-            //       同一订单含多行不同商品/卡面时各行键不同，仍全部保留，不丢数据；
-            //       订单编号与商品行均为空的行不做去重，保守保留。
-            {
-                const __lineKeyOf = (r) => {
-                    const __no = String((r['订单编号'] || r['订单号'] || '')).trim();
-                    const __desc = String(r['订单描述'] || '');
-                    const __items = __desc.split(';').map(s => s.trim()).filter(Boolean).sort().join(';');
-                    return __no + '|' + __items;
-                };
-                const __seenLineKey = new Set();
-                const __dedupRows = [];
-                for (let __di = 0; __di < df.length; __di++) {
-                    const __k = __lineKeyOf(df[__di]);
-                    if (__k === '|') { __dedupRows.push(df[__di]); continue; }
-                    if (__seenLineKey.has(__k)) continue;
-                    __seenLineKey.add(__k);
-                    __dedupRows.push(df[__di]);
-                }
-                df = __dedupRows;
-            }
-
+            const boxPrizeNoToPay = new Map(); // 20260924 混合判定：开奖单号 -> 盲盒支付时间
+            const allOrderNosByWechat = new Map(); // 全部订单号（含无奖品普通订单），碎卡兑换订单号匹配用
+            const seenOrderNos = new Set(); // 20260924 修复：同一订单号只统计一次（补邮文件重复上传导致补邮份数翻倍）
             const __total = df.length;
             const __BATCH = 5000;
             setAnalysisProgress(0, '准备分析数据...');
@@ -916,9 +831,23 @@
                 for (let __i = __s; __i < __end; __i++) {
                     const row = df[__i];
                 const orderNo = row['订单编号'] || row['订单号'];
+                const orderNoKey = orderNo ? String(orderNo).trim() : '';
+                // 20260924 修复：同一订单号只统计一次（补邮文件重复上传导致补邮份数翻倍）
+                if (orderNoKey) {
+                    if (seenOrderNos.has(orderNoKey)) continue;
+                    seenOrderNos.add(orderNoKey);
+                }
                 const wechat = row['下单账号'] || row['账号'];
                 const phone = row['收货人/提货人手机号'] || row['手机号'] || row['收货人手机号'];
                 const recipientName = row['收货人/提货人姓名'] || row['收货人姓名'] || row['收件人姓名'] || row['提货人'] || row['收件人'] || row['收货人'] || '';
+                // 全部订单号入账（含无奖品普通订单），保证碎卡兑换"订单号匹配账号"能命中
+                if (wechat && orderNo) {
+                    const wk = String(wechat).trim();
+                    if (wk) {
+                        if (!allOrderNosByWechat.has(wk)) allOrderNosByWechat.set(wk, new Set());
+                        allOrderNosByWechat.get(wk).add(String(orderNo).trim());
+                    }
+                }
                 // 支持多种日期字段名
                 const payTimeRaw = row['支付时间'] || row['下单时间'] || row['付款时间'] || row['成交时间'];
                 const orderDesc = row['订单描述'] ? String(row['订单描述']) : '';
@@ -1037,6 +966,41 @@
                     }
                 }
 
+                // 20260924 混合判定：收集盲盒单映射（开奖单号 -> 盲盒{下单时间,支付时间}）
+                if (isBlindBox && orderNo) {
+                    const bpno = row['盲盒奖品订单号'];
+                    if (bpno) {
+                        const orderTimeRaw = row['下单时间'] || row['创建时间'] || '';
+                        let boxOrderTime = null;
+                        if (orderTimeRaw !== undefined && orderTimeRaw !== null && orderTimeRaw !== '') {
+                            try {
+                                if (orderTimeRaw instanceof Date) {
+                                    boxOrderTime = orderTimeRaw;
+                                } else if (typeof orderTimeRaw === 'number') {
+                                    const d = orderTimeRaw * 86400 * 1000;
+                                    const u = new Date(d + Date.UTC(1899, 11, 30));
+                                    boxOrderTime = new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds());
+                                } else {
+                                    const st = String(orderTimeRaw).trim().replace(/^\uFEFF/, '');
+                                    if (st && st !== '-' && st !== 'null') {
+                                        if (!isNaN(Number(st)) && Number(st) > 40000 && Number(st) < 60000) {
+                                            const d = Number(st) * 86400 * 1000;
+                                            const u = new Date(d + Date.UTC(1899, 11, 30));
+                                            boxOrderTime = new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds());
+                                        } else {
+                                            boxOrderTime = new Date(st);
+                                        }
+                                    }
+                                }
+                            } catch (e) { boxOrderTime = null; }
+                        }
+                        if (!boxOrderTime || isNaN(boxOrderTime.getTime()) || boxOrderTime.getTime() < 100000000000) boxOrderTime = null;
+                        const bpKey = String(bpno).trim();
+                        if (!boxPrizeNoToPay.has(bpKey)) {
+                            boxPrizeNoToPay.set(bpKey, { orderTime: boxOrderTime, payTime: payTime });
+                        }
+                    }
+                }
                 let activityPeriod = '';
                 if (payTime) {
                     if (payTime >= ACTIVITY_START && payTime < ACTIVITY_1H_END) activityPeriod = '0-1小时';
@@ -1103,6 +1067,34 @@
                 await yieldToMain();
             }
 
+            // 20260924 混合判定补丁（v15）：判定时间改为盲盒{下单,支付}时间，保留开奖时间为 prizeTime，并重算活动期归属
+            cardData.forEach(card => {
+                const bt = boxPrizeNoToPay.get(card.orderNo);
+                if (bt) {
+                    card.prizeTime = card.payTime;
+                    card.boxOrderTime = bt.orderTime || null;
+                    card.payTime = bt.payTime || card.payTime;
+                } else {
+                    card.prizeTime = card.payTime;
+                    card.boxOrderTime = null;
+                }
+                card.activityPeriod = matchPeriod(card.payTime, card.prizeTime, card.boxOrderTime, ACTIVITY_START, ACTIVITY_1H_END) ? '0-1小时'
+                    : (matchPeriod(card.payTime, card.prizeTime, card.boxOrderTime, ACTIVITY_1H_END, ACTIVITY_6H_END) ? '1-6小时'
+                    : (matchPeriod(card.payTime, card.prizeTime, card.boxOrderTime, ACTIVITY_6H_END, ACTIVITY_24H_END) ? '6-24小时' : ''));
+                card.isRomancePeriod = matchPeriod(card.payTime, card.prizeTime, card.boxOrderTime, ROMANCE_START, ROMANCE_END);
+            });
+            orderData.forEach(order => {
+                const bt = boxPrizeNoToPay.get(order.orderNo);
+                if (bt) {
+                    order.prizeTime = order.payTime;
+                    order.boxOrderTime = bt.orderTime || null;
+                    order.payTime = bt.payTime || order.payTime;
+                } else {
+                    order.prizeTime = order.payTime;
+                    order.boxOrderTime = null;
+                }
+                order.isRomancePeriod = matchPeriod(order.payTime, order.prizeTime, order.boxOrderTime, ROMANCE_START, ROMANCE_END);
+            });
             const userMap = new Map();
             
             // 先从cardData（奖品）统计
@@ -1127,11 +1119,11 @@
                 if (card.isRomancePeriod) user.romanceDraws++;
                 if (card.activityPeriod) user.activityDraws[card.activityPeriod]++;
                 // 周末活动抽数
-                if (card.payTime && card.payTime >= WEEKEND_START && card.payTime <= WEEKEND_END) {
+                if (matchPeriod(card.payTime, card.prizeTime, card.boxOrderTime, WEEKEND_START, WEEKEND_END)) {
                     user.weekendDraws++;
                 }
                 // 终极活动抽数
-                if (card.payTime && card.payTime >= FINAL_START && card.payTime <= FINAL_END) {
+                if (matchPeriod(card.payTime, card.prizeTime, card.boxOrderTime, FINAL_START, FINAL_END)) {
                     user.finalDraws++;
                 }
                 // 保存奖品订单的时间和抽数
@@ -1146,8 +1138,6 @@
             });
             
             // 再从orderData（端盒等）统计
-            // 修复：补邮订单按订单编号去重登记（同一订单因多来源重复出现时只计一次）
-            const __buyouSeenByOrder = new Map();
             orderData.forEach(order => {
                 if (!userMap.has(order.wechat)) userMap.set(order.wechat, { 
                     wechat: order.wechat, phone: order.phone, 
@@ -1173,33 +1163,33 @@
                         user.cards.push(prize);
                         user.totalDraws++;
                         if (order.isRomancePeriod) user.romanceDraws++;
-                        if (order.payTime && order.payTime >= WEEKEND_START && order.payTime <= WEEKEND_END) {
+                        if (matchPeriod(order.payTime, order.prizeTime, order.boxOrderTime, WEEKEND_START, WEEKEND_END)) {
                             user.weekendDraws++;
                         }
-                        if (order.payTime && order.payTime >= FINAL_START && order.payTime <= FINAL_END) {
+                        if (matchPeriod(order.payTime, order.prizeTime, order.boxOrderTime, FINAL_START, FINAL_END)) {
                             user.finalDraws++;
                         }
                     });
                     if (order.isRomancePeriod) {
                         user.romanceOrders++;
                     }
-                    // 活动期抽数
-                    const t = order.payTime;
-                    if (t) {
+                    // 活动期抽数（20260924 混合判定：支付时间或开奖时间任一在范围内即算）
+                    const t = order.payTime; const tt = order.prizeTime;
+                    if (t || tt) {
                         const PHASE2_START = new Date(ACTIVITY_START.getTime() + 24 * 60 * 60 * 1000);
-                        if (t >= ACTIVITY_START && t < ACTIVITY_1H_END) {
+                        if (matchPeriod(t, tt, order.boxOrderTime, ACTIVITY_START, ACTIVITY_1H_END)) {
                             user.activityDraws['0-1小时'] += order.itemCount;
-                        } else if (t >= ACTIVITY_1H_END && t < ACTIVITY_6H_END) {
+                        } else if (matchPeriod(t, tt, order.boxOrderTime, ACTIVITY_1H_END, ACTIVITY_6H_END)) {
                             user.activityDraws['1-6小时'] += order.itemCount;
-                        } else if (t >= ACTIVITY_6H_END && t < PHASE2_START) {
+                        } else if (matchPeriod(t, tt, order.boxOrderTime, ACTIVITY_6H_END, PHASE2_START)) {
                             user.activityDraws['6-24小时'] += order.itemCount;
                         }
                         // 周末活动抽数
-                        if (t >= WEEKEND_START && t <= WEEKEND_END) {
+                        if (matchPeriod(t, tt, order.boxOrderTime, WEEKEND_START, WEEKEND_END)) {
                             user.weekendDraws += order.itemCount;
                         }
                         // 终极活动抽数
-                        if (t >= FINAL_START && t <= FINAL_END) {
+                        if (matchPeriod(t, tt, order.boxOrderTime, FINAL_START, FINAL_END)) {
                             user.finalDraws += order.itemCount;
                         }
                     }
@@ -1209,22 +1199,10 @@
                     }
                 }
                 
-                // 统计补邮订单（按订单编号去重：同一订单重复出现只计一次，避免"补邮*2"）
+                // 统计补邮订单
                 if (order.isBuyou) {
-                    const __bk = String(order.orderNo || '').trim() ||
-                        ('__no_order_no__|' + String(order.wechat || '') + '|' + String(order.orderDesc || ''));
-                    const __prevBuyou = __buyouSeenByOrder.get(__bk);
-                    if (!__prevBuyou) {
-                        __buyouSeenByOrder.set(__bk, { user: user, count: order.buyouCount || 0 });
-                        user.buyouOrders.push({ orderNo: order.orderNo, time: order.payTime, count: order.buyouCount });
-                        user.buyouCount += order.buyouCount;
-                    } else if ((order.buyouCount || 0) > (__prevBuyou.count || 0)) {
-                        // 同一订单号重复出现：仅补足差值，保留同一订单购买多份补邮的数量语义，绝不重复累加
-                        __prevBuyou.user.buyouCount += (order.buyouCount || 0) - (__prevBuyou.count || 0);
-                        const __rec = (__prevBuyou.user.buyouOrders || []).find(x => String(x.orderNo || '').trim() === String(order.orderNo || '').trim());
-                        if (__rec) __rec.count = order.buyouCount;
-                        __prevBuyou.count = order.buyouCount;
-                    }
+                    user.buyouOrders.push({ orderNo: order.orderNo, time: order.payTime, count: order.buyouCount });
+                    user.buyouCount += order.buyouCount;
                 }
             });
 
@@ -1300,53 +1278,46 @@
                     else romanceCondition = '非首次下单:未达标';
                 }
 
-                // 周末Happy Hour活动（7.18 12:00 ~ 7.20 18:00）
+                // 周末Happy Hour活动（7.18 12:00 ~ 7.20 18:00）— 20261004按官方规则修订
+                // 普通玩家：非首次≥6抽随1张/≥10抽不重复2张；首次≥12抽随1张/≥20抽不重复2张
+                // 多抽玩家：满210抽随1张；满300抽赠不重复2张（一套）
+                // 叠加：满210/300高抽玩家，若周末期(7.18-7.20)内按活动标准抽了（首次≥12/非首次≥6），再叠加一套（不重复2张）
                 let weekendCondition = '';
                 let weekendCardCount = 0;
-                // 规则修正：
-                // 1. 满300抽以上：无论7.18-7.20之间有没有抽，都得2张
-                // 2. 满210抽以上：得1张；如果在7.18-7.20之间抽了6抽及以上，拿两张
-                // 3. 普通玩家：根据活动期间抽数计算
+                let weekendRandomCount = 0, weekendUniqueCount = 0;
+                // 活动期是否按标准达标（首次≥12抽/非首次≥6抽）
+                const weekendStd = user.weekendDraws > 0 && (isFirstTimeWeekend ? user.weekendDraws >= 12 : user.weekendDraws >= 6);
                 if (totalDraws >= 300) {
-                    weekendCondition = '高抽数玩家:满300抽赠2张';
-                    weekendCardCount = 2;
-                } else if (totalDraws >= 210) {
-                    if (user.weekendDraws >= 6) {
-                        weekendCondition = '高抽数玩家:满210抽+活动期6抽得2张';
-                        weekendCardCount = 2;
+                    weekendUniqueCount = 2; // 满300基础：赠不重复2张（一套）
+                    if (weekendStd) {
+                        weekendUniqueCount = 4; // 活动期达标叠加一套 → 两套
+                        weekendCondition = '高抽数玩家:满300抽赠不重复2张+活动期达标再赠一套(共4张)';
                     } else {
-                        weekendCondition = '高抽数玩家:满210抽赠1张';
-                        weekendCardCount = 1;
+                        weekendCondition = '高抽数玩家:满300抽赠不重复2张';
+                    }
+                } else if (totalDraws >= 210) {
+                    if (weekendStd) {
+                        weekendUniqueCount = 2; // 限定期内又达标：给一套不重复2张
+                        weekendCondition = '高抽数玩家:满210抽+活动期达标赠不重复2张';
+                    } else {
+                        weekendRandomCount = 1; // 未达标：随1张
+                        weekendCondition = '高抽数玩家:满210抽随1张';
                     }
                 } else if (user.weekendDraws > 0) {
                     // 普通玩家
                     if (isFirstTimeWeekend) {
-                        if (user.weekendDraws >= 20) {
-                            weekendCondition = '首次下单:20抽得两张';
-                            weekendCardCount = 2;
-                        } else if (user.weekendDraws >= 12) {
-                            weekendCondition = '首次下单:12抽得一张';
-                            weekendCardCount = 1;
-                        } else {
-                            weekendCondition = '首次下单:未达标';
-                            weekendCardCount = 0;
-                        }
+                        if (user.weekendDraws >= 20) { weekendUniqueCount = 2; weekendCondition = '首次下单:20抽得两张'; }
+                        else if (user.weekendDraws >= 12) { weekendRandomCount = 1; weekendCondition = '首次下单:12抽得一张'; }
+                        else { weekendCondition = '首次下单:未达标'; }
                     } else {
-                        if (user.weekendDraws >= 10) {
-                            weekendCondition = '非首次下单:10抽得两张';
-                            weekendCardCount = 2;
-                        } else if (user.weekendDraws >= 6) {
-                            weekendCondition = '非首次下单:6抽得一张';
-                            weekendCardCount = 1;
-                        } else {
-                            weekendCondition = '非首次下单:未达标';
-                            weekendCardCount = 0;
-                        }
+                        if (user.weekendDraws >= 10) { weekendUniqueCount = 2; weekendCondition = '非首次下单:10抽得两张'; }
+                        else if (user.weekendDraws >= 6) { weekendRandomCount = 1; weekendCondition = '非首次下单:6抽得一张'; }
+                        else { weekendCondition = '非首次下单:未达标'; }
                     }
                 } else {
                     weekendCondition = '';
-                    weekendCardCount = 0;
                 }
+                weekendCardCount = weekendRandomCount + weekendUniqueCount;
 
                 // 收官终极活动（7.25 12:00 ~ 7.31 17:17）
                 // 端盒算381抽（已统一）
@@ -1520,21 +1491,14 @@
                     romanceRandomCount = 1;  // 随机1张
                 }
 
-                // 周末小卡（二选一：随机1张 或 不重复2张）
-                // 注意：高抽数玩家条件用数字"2张/1张"，普通玩家条件用中文"两张/一张"，两种都要兼容
-                let weekendRandomCount = 0, weekendUniqueCount = 0;
-                if (weekendCondition.includes('得2张') || weekendCondition.includes('赠2张') || weekendCondition.includes('得两张') || weekendCondition.includes('赠两张')) {
-                    weekendUniqueCount = 2;  // 不重复2张
-                } else if (weekendCondition.includes('得1张') || weekendCondition.includes('赠1张') || weekendCondition.includes('得一张') || weekendCondition.includes('赠一张')) {
-                    weekendRandomCount = 1;  // 随机1张
-                }
+
 
                 // 有效订单数 = 有奖品的订单数 + 端盒订单数
                 const validOrderCount = user.orders.size; // 现在orders里只有有效订单
                 
                 userData.push({
                     wechat: user.wechat, phone: user.phone || '', recipientName: user.recipientName || '', orderCount: validOrderCount,
-                    orderNos: [...user.orders].join(';'), items: itemList || '无', totalDraws,
+                    orderNos: [...(allOrderNosByWechat.get(String(user.wechat).trim()) || user.orders)].join(';'), items: itemList || '无', totalDraws,
                     firstPayTime: firstPayTime ? formatDate(firstPayTime) : '',
                     full10Time: full10Time ? formatDate(full10Time) : '', earlyBirdReward,
                     limitedCards,
@@ -1957,7 +1921,7 @@
                 '浪漫疯子随机': '浪漫疯子活动（7.13-7.15）随机1张',
                 '浪漫疯子不重复': '浪漫疯子活动（7.13-7.15）确定不重复',
                 '周末随机': '周末Happy Hour（7.18-7.20）随机1张',
-                '周末不重复': '周末Happy Hour（7.18-7.20）确定不重复'
+                '周末不重复': '周末Happy Hour（7.18-7.20）确定不重复2张'
             };
             const totalActivityCardCount = activityCardStats.reduce((sum, c) => sum + c.count, 0);
             const totalActivityCardUsers = new Set();
@@ -1965,7 +1929,7 @@
             
             activityCardStatsBody.innerHTML = activityCardStats.map(card => `
                 <tr>
-                    <td>${activityCardDisplayNameOf(card.cardType)}</td>
+                    <td>${WEEKEND_CARD_DISPLAY[card.cardType] || card.cardType}</td>
                     <td>${activityCardInfo[card.cardType] || card.cardType}</td>
                     <td>${card.count}</td>
                     <td>${card.users.size}</td>
@@ -2038,8 +2002,8 @@
                 let weekendDetail = '-';
                 if (user.weekendRandomCount > 0 || user.weekendUniqueCount > 0) {
                     const parts = [];
-                    if (user.weekendRandomCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">随机×' + user.weekendRandomCount + '</span>');
-                    if (user.weekendUniqueCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">不重复×' + user.weekendUniqueCount + '</span>');
+                    if (user.weekendRandomCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">周末活动随机×' + user.weekendRandomCount + '</span>');
+                    if (user.weekendUniqueCount > 0) parts.push('<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">周末活动不重复×' + user.weekendUniqueCount + '</span>');
                     weekendDetail = parts.join('');
                 } else if (user.weekendCondition && user.weekendCondition.includes('未达标')) {
                     weekendDetail = '<span style="color:#999;font-size:11px;">未达标</span>';
@@ -2057,13 +2021,6 @@
                 const specialBonusBadge = user.specialBonus 
                     ? `<span style="color:#7c3aed;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${user.specialBonus}</span>` 
                     : '<span style="color:#999;font-size:11px;">-</span>';
-                // 超like兑换卡面显示（来源：按订单整理表按订单号关联；未命中订单红色提示，无记录显示 -）
-                const likeExTxt = String(user.likeExchangeCards || '').trim();
-                const likeBadge = likeExTxt
-                    ? (likeExTxt.indexOf('未匹配') >= 0 || likeExTxt.indexOf('请联系客服') >= 0
-                        ? `<span style="color:#ef4444;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${likeExTxt}</span>`
-                        : `<span style="color:#0f766e;font-size:11px;word-break:break-all;white-space:normal;line-height:1.4;">${likeExTxt}</span>`)
-                    : '<span style="color:#999;font-size:11px;">未参与</span>';
                 
                 // 补邮情况显示：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2097,8 +2054,7 @@
                     <td>${milestoneBadge}</td>
                     <td>${allMemberBadge}</td>
                     <td>${specialBonusBadge}</td>
-                    <td>${likeBadge}</td>
-                    <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;max-width:320px;display:inline-block;white-space:normal;">${jizanGiftCustomerTextOf(user.xuanchuanGift)}</span>` : '<span style="color:#999;font-size:11px;">未参与</span>'}</td>
+                    <td>${user.xuanchuanGift && user.xuanchuanGift !== '无' ? `<span style="color:#059669;font-size:11px;">${user.xuanchuanGift}</span>` : '<span style="color:#999;font-size:11px;">无</span>'}</td>
                     <td style="white-space:nowrap;">${limitedDetail}</td>
                     <td style="white-space:nowrap;">${buyouDetail}</td>
                     <td>${user.firstPayTime || ''}</td>
@@ -2110,7 +2066,7 @@
                     <td style="max-width:200px;">${user.finalCondition || '<span style="color:#999;font-size:11px;">-</span>'}</td>
                 </tr>
             `;
-            }).join('') : '<tr><td colspan="21" style="text-align:center;color:#999;">暂无数据</td></tr>';
+            }).join('') : '<tr><td colspan="20" style="text-align:center;color:#999;">暂无数据</td></tr>';
 
             const totalPages = Math.ceil(filteredData.length / pageSize);
             const pagination = document.getElementById('pagination');
@@ -2234,7 +2190,7 @@
         }
 
         function exportUserSheet() {
-            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '超like卡', '全员特典', '超like兑换卡面', '宣传集赞礼', '补邮情况', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '柯舟求剑小卡随机', '柯舟求剑小卡不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
+            const headers = ['下单账号', '手机号', '订单数', '订单号', '货品', '总抽数', '是否端盒', '个人满抽礼', '超like卡', '全员特典', '超like兑换卡面', '宣传集赞礼', '补邮情况', '限时小卡1', '限时小卡2', '限时小卡3', '首次支付时间', '满10抽时间', '限时小卡获得情况', '0-1小时抽数', '1-6小时抽数', '6-24小时抽数', '7.13-7.15抽数', '浪漫疯子随机', '浪漫疯子不重复', '7.18-7.20抽数', '周末活动随机', '周末活动不重复', '终极活动抽数', '终极活动有效抽数(端盒381)', '镜头签数量', '周正小卡数量', '开推制服小卡数量', '终极活动套数', '终极活动获得情况'];
             const data = filteredData.map(u => {
                 // 补邮情况描述：无需补邮 / 已补邮 / 未补邮
                 // 规则：满10抽无需补邮，少于10抽才需要补邮
@@ -2252,7 +2208,7 @@
                 return [
                     (u._isMerged && u.mergedFrom ? u.mergedFrom.join('；') : (u.wechat || '')), u.phone || '', u.orderCount || 0, u.orderNos || '', u.items || '',
                     u.totalDraws || 0, u.isDuanhe || '否', u.milestoneRewards || '',
-                    u.allMemberBonus || '', u.specialBonus || '', likeExchangeTextOf(u) || '未参与', jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与',
+                    u.allMemberBonus || '', u.specialBonus || '', likeExchangeTextOf(u) || '未参与', u.xuanchuanGift || '无',
                     buyouStr,
                     u.limited1Count || 0, u.limited2Count || 0, u.limited3Count || 0,
                     u.firstPayTime || '', u.full10Time || '', u.limitedCards || '',
@@ -2303,9 +2259,9 @@
                 '浪漫疯子随机': '浪漫疯子活动（7.13-7.15）随机1张',
                 '浪漫疯子不重复': '浪漫疯子活动（7.13-7.15）确定不重复',
                 '周末随机': '周末Happy Hour（7.18-7.20）随机1张',
-                '周末不重复': '周末Happy Hour（7.18-7.20）确定不重复'
+                '周末不重复': '周末Happy Hour（7.18-7.20）确定不重复2张'
             };
-            const data = activityCardStats.map(c => [activityCardDisplayNameOf(c.cardType), activityCardInfo[c.cardType] || c.cardType, c.count, c.users.size]);
+            const data = activityCardStats.map(c => [WEEKEND_CARD_DISPLAY[c.cardType] || c.cardType, activityCardInfo[c.cardType] || c.cardType, c.count, c.users.size]);
             // 添加合计行
             const totalCount = activityCardStats.reduce((sum, c) => sum + c.count, 0);
             const totalUsers = new Set();
@@ -2331,9 +2287,9 @@
             // 正常发放=卡面编号原样；重复待核实（卡号+？待核实）=需客服确认文案；异常=审核未通过文案
             const laibaoGiftTextOf = (raw) => {
                 const s = String(raw || '').trim();
-                if (!s || s === '无') return '未参与';
+                if (!s || s === '无') return '-';
                 if (/[？?]待核实/.test(s)) return '重复填写问卷，请联系客服确认';
-                if (s === '异常，请联系客服') return JIZAN_FAIL_GUIDE_TEXT;
+                if (s === '异常，请联系客服') return '审核未通过，请联系客服';
                 return s;
             };
             // 同手机号多账号映射（基于全量 userData）：备注提示“数据分散，请合并查看”
@@ -2357,6 +2313,21 @@
                 const acct = String((s.user && s.user.wechat) || s.nickname || '').trim();
                 if (acct) { const k = 'a:' + acct; if (suikaStatusRank(key) > suikaStatusRank(suikaStatusMap[k] || '')) suikaStatusMap[k] = key; }
             });
+            // 【v10】真正提交过碎卡兑换的账号/手机号集合：同手机号多账号（如转运仓）下，
+            // 只有账号自己提交过兑换才显示审核状态/卡面；未提交的账号显示"未提交兑换"，避免连坐误显示
+            const submittedAccounts = {};
+            const submittedPhones = {};
+            (suikaSubmissions || []).forEach(s => {
+                const _sp = normalizePhone(String(s.phone || '').trim());
+                if (_sp) submittedPhones['p:' + _sp] = true;
+                const _acct = String((s.user && s.user.wechat) || s.nickname || '').trim();
+                if (_acct) submittedAccounts['a:' + _acct] = true;
+            });
+            // 某行是否提交过兑换（支持合并行：分号分隔的多个账号任一提交即算）
+            const rowSubmitted = (acct) => {
+                return String(acct || '').split(/[；;]/).map(x => x.trim()).filter(Boolean)
+                    .some(a => submittedAccounts['a:' + a]);
+            };
             // 审核原因明细映射（与 suikaStatusMap 同 key 体系）：聚合该手机号/账号下所有未通过提交的自然语言原因，
             // 不含物理行号与【原始填报参考】（改动v9）；同一提交多个错误逐行列出（\n 分隔）
             const suikaReasonDetailMap = {};
@@ -2369,7 +2340,7 @@
                 const sAudit = s.audit || {};
                 const sPass = sAudit.pass === true || sAudit.status === '通过' || sAudit.type === '通过';
                 if (sPass) return;
-                let t = buildSuikaSummaryReasonWithGuide(s, { html: false });
+                let t = buildSuikaSummaryReason(s, { html: false });
                 if (!t || !t.trim()) t = sAudit.status || '需人工处理';
                 const lines = t.split('\n').filter(x => x && x.trim());
                 const text = lines.map(x => '提交 ' + (s.code || '') + '：' + x).join('\n');
@@ -2379,13 +2350,32 @@
                 if (acct) addReasonDetail('a:' + acct, text);
             });
             const suikaReasonDetailTextOf = (acct, phone) => {
-                const arr = suikaReasonDetailMap['a:' + acct] || suikaReasonDetailMap['p:' + normalizePhone(phone)] || [];
+                // 未提交兑换的账号不显示任何原因（避免同手机号连坐他人原因）
+                if (!rowSubmitted(acct)) return '';
+                const accts = String(acct || '').split(/[；;]/).map(x => x.trim()).filter(Boolean);
+                const arr = accts.length > 1
+                    ? (suikaReasonDetailMap['p:' + normalizePhone(phone)] || [])
+                    : (suikaReasonDetailMap['a:' + accts[0]] || []);
                 return arr.join('\n');
             };
             const suikaStatusTextOf = (acct, phone) => {
-                const key = suikaStatusMap['a:' + acct] || suikaStatusMap['p:' + normalizePhone(phone)] || '';
-                if (key === '通过') return '审核通过';
-                return key ? suikaCustomerStatusTextOf(key) : '未参与';
+                const accts = String(acct || '').split(/[；;]/).map(x => x.trim()).filter(Boolean);
+                const pKey = 'p:' + normalizePhone(phone);
+                // 合并展示行（同手机号多账号聚合）：任一账号提交过即按手机号合并口径显示；否则未提交/未参与
+                if (accts.length > 1) {
+                    if (!accts.some(a => submittedAccounts['a:' + a])) {
+                        return submittedPhones[pKey] ? '未提交兑换' : '未参与';
+                    }
+                    const key = suikaStatusMap[pKey] || '';
+                    return key === '通过' ? '审核通过' : (key === '需人工' ? '需人工审核，请联系微店客服' : (key === SUIKA_QTY_ERR_STATUS ? SUIKA_QTY_ERR_STATUS : '未参与'));
+                }
+                // 单账号行：只显示该账号自己提交的审核结果，不再按手机号连坐
+                const aKey = 'a:' + accts[0];
+                if (submittedAccounts[aKey]) {
+                    const key = suikaStatusMap[aKey] || '';
+                    return key === '通过' ? '审核通过' : (key === '需人工' ? '需人工审核，请联系微店客服' : (key === SUIKA_QTY_ERR_STATUS ? SUIKA_QTY_ERR_STATUS : '未参与'));
+                }
+                return submittedPhones[pKey] ? '未提交兑换' : '未参与';
             };
             // 成功兑换到的卡面映射（与 suikaStatusMap 同 key 体系：按手机号/账号关联，仅聚合审核通过的请求的换入卡面）
             const suikaPassCardsMap = {};
@@ -2415,7 +2405,12 @@
             });
             // 取该用户成功兑换到的卡面汇总文本；与状态列同优先级（先账号 key 再手机号 key）
             const suikaPassCardsTextOf = (acct, phone) => {
-                const m = suikaPassCardsMap['a:' + acct] || suikaPassCardsMap['p:' + normalizePhone(phone)];
+                // 未提交兑换的账号不显示他人兑换到的卡面（避免同手机号连坐）
+                if (!rowSubmitted(acct)) return '';
+                const accts = String(acct || '').split(/[；;]/).map(x => x.trim()).filter(Boolean);
+                const m = accts.length > 1
+                    ? suikaPassCardsMap['p:' + normalizePhone(phone)]
+                    : suikaPassCardsMap['a:' + accts[0]];
                 if (!m) return '';
                 return Object.keys(m).map(card => card + '×' + m[card]).join('、');
             };
@@ -2443,7 +2438,12 @@
             });
             // 取该用户换出卡汇总文本；与状态列同优先级（先账号 key 再手机号 key），无记录显示 '-'
             const suikaOutCardsTextOf = (acct, phone) => {
-                const m = suikaOutCardsMap['a:' + acct] || suikaOutCardsMap['p:' + normalizePhone(phone)];
+                // 未提交兑换的账号不显示他人换出卡（避免同手机号连坐）
+                if (!rowSubmitted(acct)) return '-';
+                const accts = String(acct || '').split(/[；;]/).map(x => x.trim()).filter(Boolean);
+                const m = accts.length > 1
+                    ? suikaOutCardsMap['p:' + normalizePhone(phone)]
+                    : suikaOutCardsMap['a:' + accts[0]];
                 if (!m) return '-';
                 return Object.keys(m).map(card => card + '×' + m[card]).join('、');
             };
@@ -2477,8 +2477,8 @@
                 
                 // 周末活动文字描述
                 const weekendParts = [];
-                if (u.weekendRandomCount > 0) weekendParts.push('随机×' + u.weekendRandomCount);
-                if (u.weekendUniqueCount > 0) weekendParts.push('不重复×' + u.weekendUniqueCount);
+                if (u.weekendRandomCount > 0) weekendParts.push('周末活动随机×' + u.weekendRandomCount);
+                if (u.weekendUniqueCount > 0) weekendParts.push('周末活动不重复×' + u.weekendUniqueCount);
                 const weekendStr = weekendParts.length > 0 ? weekendParts.join('、') : (u.weekendCondition?.includes('未达标') ? '未达标' : '-');
                 
                 // 备注：检测海外用户（下单账号或手机号为非11位国内手机号格式）
@@ -2537,7 +2537,7 @@
             });
             const sheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
             // 统一列宽（含「用于兑换的卡」），三处导出入口共用本函数即自动生效
-            sheet['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            sheet['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             return sheet;
         }
 
@@ -2546,12 +2546,12 @@
             if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
             const wb = XLSX.utils.book_new();
             const ws = exportLaibaoSheet();
-            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws, '来豹接龙查询表');
             // 集赞修改记录 Sheet（复用集赞修改记录行数据；无集赞数据/无修改记录时写占位行，保证未匹配到 userData 的修改也可见）
             const { headers: jh5, data: jd5 } = buildJizanEditLogSheet();
             const wsJizanLog = XLSX.utils.aoa_to_sheet([jh5, ...jd5]);
-            wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
+            wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, wsJizanLog, '集赞修改记录');
             // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
             if (suikaSubmissions && suikaSubmissions.length > 0) {
@@ -2590,10 +2590,9 @@
                 let card = raw;
                 let status = '正常';
                 if (raw === '异常，请联系客服') {
-                    status = '审核未通过';
-                    card = JIZAN_FAIL_GUIDE_TEXT;
+                    status = '异常';
                 } else if (/[？?]待核实/.test(raw)) {
-                    status = '待确认，请联系客服';
+                    status = '待核实';
                     card = raw.replace(/([？?]待核实)\s*$/, '');
                 }
                 let buyouStr = '无需补邮';
@@ -2604,7 +2603,7 @@
                 data.push([u.wechat || '', u.phone || '', card, status, buyouStr]);
             });
             const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
-            ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 36 }, { wch: 14 }, { wch: 14 }];
+            ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 22 }, { wch: 10 }, { wch: 14 }];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, '集赞核心信息');
             XLSX.writeFile(wb, getTimestampFilename('集赞核心信息查询表'));
@@ -2638,7 +2637,7 @@
                 // 集赞修改记录 Sheet（与「导出来豹接龙查询表」按钮口径一致；无记录时写占位行）
                 const { headers: jh5, data: jd5 } = buildJizanEditLogSheet();
                 const wsJizanLog = XLSX.utils.aoa_to_sheet([jh5, ...jd5]);
-                wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
+                wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
                 XLSX.utils.book_append_sheet(workbook, wsJizanLog, '集赞修改记录');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐_来豹接龙查询表'));
             }
@@ -2765,8 +2764,8 @@
             if (totalDraws >= 50) rewards.push('烫色签名拍立得');
             if (totalDraws >= 66) rewards.push('陆西骁淋浴反转胶片');
             if (totalDraws >= 88) rewards.push('亚克力A5卡册');
-            // 累计型：光栅小卡，每30抽1张，最多6张
-            const guangtsCount = Math.min(Math.floor(totalDraws / 30), 6);
+            // 累计型：光栅小卡，每30抽1张，满180得第1套6张，满360拿满2套共12张（20261004修订）
+            const guangtsCount = Math.min(Math.floor(totalDraws / 30), 12);
             if (guangtsCount > 0) rewards.push('光栅小卡×' + guangtsCount);
             // mini PB：100抽1份，200抽2份（复数），最多2份
             if (totalDraws >= 200) rewards.push('mini PB 2（复数）');
@@ -3055,9 +3054,6 @@
                 } else {
                     wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
                 }
-                window.__marvisEnqueueBackup(suikaFile); window.__marvisFlushBackup(); // 解析成功即自动备份原文件
-                // 重导前先保留本地已有的人工处理记录，供下方按 code 贴回，避免覆盖洗白
-                const suikaPrevSubmissions = Array.isArray(suikaSubmissions) ? suikaSubmissions.slice() : [];
                 suikaSubmissions = groupSuikaRowsFromWb(wb);
                 userCardCountsMap = buildUserCardCounts(rawOrdersData);
                 setProg(55, '匹配用户并审核...');
@@ -3089,8 +3085,9 @@
                         auditSubmissionsGrouped(list, user, triedKeys);
                     });
                 } else {
-                    // 原有口径：跨提交抽数累计——同用户按提交时间先后审核，
-                    // 通过提交消耗的抽数累计扣减，后续提交用剩余抽数判定资格（已兑换抽数不可叠加使用）
+                    // 默认口径（v11）：按下单账号独立判定——同一账号跨提交按提交时间先后审核，
+                    // 通过提交消耗的抽数累计扣减，后续提交用剩余抽数判定资格（已兑换抽数不可叠加使用）。
+                    // 同手机号多账号不合并；订单号能锁定的按订单号锁定具体账号，锁不定的在 auditSubmission 中强制需人工。
                     const groupByUser = {};
                     suikaSubmissions.forEach(s => {
                         const key = s.user ? s.user.wechat : '__nouser__';
@@ -3108,8 +3105,6 @@
                         });
                     });
                 }
-                // 重传/换批次时，把本次导入前本地已人工处理过的记录（修改历史/人工放行）按 code 贴回新行，避免人工成果随覆盖丢失
-                suikaPreserveManual(suikaPrevSubmissions, suikaSubmissions);
                 suikaAuditMap = {};
                 suikaSubmissions.forEach(s => {
                     if (s.user) {
@@ -3125,7 +3120,7 @@
                 const statusCount = { '通过': 0, '未找到用户': 0, '需人工处理': 0 };
                 suikaSubmissions.forEach(s => { statusCount[s.audit.status] = (statusCount[s.audit.status] || 0) + 1; });
                 alert(`碎卡兑换审核完成：共 ${suikaSubmissions.length} 个提交\n通过 ${statusCount['通过']} 个，未找到用户 ${statusCount['未找到用户']} 个\n需人工处理 ${statusCount['需人工处理']} 个`);
-                // 不再“导入即自动保存到云端”：重导只更新本地页面并保留人工成果，避免把无历史状态整份回写云端；确认无误后手动点「保存到云端」
+                queueCloudSave();
             } catch (err) {
                 const rawMsg = (err && err.message) ? err.message : String(err || '未知错误');
                 let alertMsg;
@@ -3158,42 +3153,6 @@
 
         // 碎卡填表格式错误状态文案（改动2/3：张数语义列误填卡面编号时强制需人工审核）
         const SUIKA_QTY_ERR_STATUS = '接龙提交内容填写错误，需人工审核，请联系微店客服';
-
-        // ===== 定案：审核未通过 / 需人工审核 档对外改为「引导填写问题反馈问卷」 =====
-        // 仅改展示与导出层文案；内部状态键（SUIKA_QTY_ERR_STATUS 等）与 userData.xuanchuanGift 存储值不变，
-        // 避免云端已存审核结果 / 导入数据与分组判定失配。代码中无问题反馈问卷链接配置，故按纯文本展示。
-        const JIZAN_FAIL_GUIDE_TEXT = '审核未通过，请填写问题反馈问卷重新提交信息';
-        const SUIKA_MANUAL_GUIDE_TEXT = '需人工审核，请填写问题反馈问卷重新填写具体兑换信息';
-        const SUIKA_QTY_ERR_GUIDE_TEXT = '接龙提交内容填写错误，需人工审核，请填写问题反馈问卷重新填写具体兑换信息';
-        const GUIDE_QUESTIONNAIRE_TAIL = '（已引导填写问题反馈问卷）';
-        // 集赞「宣传集赞礼」对外展示值：内部存储值 '异常，请联系客服' -> 新对外文案；其余原样
-        function jizanGiftCustomerTextOf(v) {
-            const s = String(v == null ? '' : v).trim();
-            return s === '异常，请联系客服' ? JIZAN_FAIL_GUIDE_TEXT : s;
-        }
-        // 碎卡状态对外展示值：填写错误档 / 需人工档 -> 新对外文案；通过、未找到用户等原样
-        function suikaCustomerStatusTextOf(v) {
-            const s = String(v == null ? '' : v).trim();
-            if (s === SUIKA_QTY_ERR_STATUS) return SUIKA_QTY_ERR_GUIDE_TEXT;
-            if (s === '需人工' || s === '需人工处理' || s === '需人工审核') return SUIKA_MANUAL_GUIDE_TEXT;
-            return s;
-        }
-        // 碎卡状态内部展示值：去掉旧「联系客服」话术，仅保留原因分类（内部状态键不变）
-        function suikaInternalStatusTextOf(v) {
-            return String(v == null ? '' : v) === SUIKA_QTY_ERR_STATUS ? '接龙提交内容填写错误，需人工审核' : v;
-        }
-        // 内部「原因明细」：仅需人工 / 填写错误档在原分类末尾追加引导说明，不改变原因分类本身
-        function buildSuikaSummaryReasonWithGuide(s, opts) {
-            const txt = buildSuikaSummaryReason(s, opts);
-            if (!txt) return txt;
-            const audit = (s && s.audit) || {};
-            const st = String(audit.status || '');
-            const isGuideCase = st === SUIKA_QTY_ERR_STATUS
-                || (st !== '通过' && st !== '未找到用户' && !audit.pass);
-            if (!isGuideCase) return txt;
-            const sep = (!opts || opts.html !== false) ? '<br>' : '\n';
-            return txt + sep + GUIDE_QUESTIONNAIRE_TAIL;
-        }
 
         // 按索引区间移除文本片段（用等长空格占位，避免破坏后续正则匹配位置）
         function removeUsedRanges(text, ranges) {
@@ -3684,6 +3643,23 @@
                 sub.audit = ret;
                 return ret;
             }
+            // 改动v11：同手机号多账号且订单号未命中具体账号时，不允许落到第一个账号判定
+            // （活动口径：兑换按下单账号独立判定、同手机号不合并），强制需人工确认归属
+            if (sub.userMatch && sub.userMatch.ambiguous) {
+                const ambReason = '同手机号多账号，订单号未命中具体账号，需人工确认归属';
+                sub.audit = { pass: false, type: '需人工处理', status: '需人工处理', reasons: [ambReason], ambiguous: true };
+                sub.requests.forEach(req => {
+                    req.audit = {
+                        pass: false,
+                        type: '需人工处理',
+                        usedDraws: 0,
+                        inCard: normalizeCardId(req.inCard) || req.inCard || '',
+                        inQty: req.inQty > 0 ? req.inQty : 1,
+                        reasons: [ambReason]
+                    };
+                });
+                return { pass: false, status: '需人工处理', reasons: [ambReason] };
+            }
             const user = sub.user;
             const userCards = getUserCards(user);
             const triedKeys = (sub.userMatch && sub.userMatch.triedKeys) ? sub.userMatch.triedKeys : [];
@@ -3934,7 +3910,7 @@
                     return lines.join(withHtml ? '<br>' : '\n');
                 }
                 else if (s.audit.blockedFrom) lines.push('同手机号其他提交需人工处理（' + s.audit.blockedFrom + '）');
-                else lines.push(suikaInternalStatusTextOf(s.audit.status || '需人工处理'));
+                else lines.push(s.audit.status || '需人工处理');
                 return lines.join(withHtml ? '<br>' : '\n');
             }
             const tag = withHtml ? suikaReasonTagged : x => x;
@@ -4042,31 +4018,6 @@
                     ? '<span style="display:inline-block;background:#fef2f2;color:#ef4444;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;" title="卡面核对未通过：换出卡未抽到或数量不足">✗ 卡面</span>'
                     : '<span style="display:inline-block;background:#f0fdf4;color:#059669;padding:1px 8px;border-radius:10px;font-size:11px;margin-left:6px;" title="卡面核对通过">✓ 卡面</span>';
             };
-            // ✎已改标记：该条被客服修改过/人工放行过/有修改历史即显示，悬停可看最近一次操作
-            const suikaEditedBadge = function (has, tip) {
-                return has ? '<span style="color:#2563eb;font-size:11px;white-space:nowrap;" title="' + escAttr(tip || '') + '">✎已改</span>' : '<span style="color:#d1d5db;">—</span>';
-            };
-            const lastHistTip = function (arr, fallback) {
-                if (arr && arr.length) { const h = arr[arr.length - 1]; return (h.type || '修改') + (h.note ? '：' + h.note : ''); }
-                return fallback || '';
-            };
-            const reqHasEdit = function (r) { return !!((r.suikaHistory && r.suikaHistory.length) || r.manuallyEdited || (r.audit && r.audit.manuallyReleased)); };
-            const reqEditedTip = function (r) {
-                if (r.suikaHistory && r.suikaHistory.length) return lastHistTip(r.suikaHistory);
-                if (r.manuallyEdited) return '客服已修改' + (r.editedNote ? '：' + r.editedNote : '');
-                if (r.audit && r.audit.manuallyReleased) return '人工放行';
-                return '';
-            };
-            const subHasEdit = function (s) {
-                if ((s.suikaHistory && s.suikaHistory.length) || s.manuallyEdited) return true;
-                return (s.requests || []).some(reqHasEdit);
-            };
-            const subEditedTip = function (s) {
-                if (s.suikaHistory && s.suikaHistory.length) return lastHistTip(s.suikaHistory);
-                if (s.manuallyEdited) return '客服已修改' + (s.editedNote ? '：' + s.editedNote : '');
-                const r = (s.requests || []).filter(reqHasEdit)[0];
-                return r ? reqEditedTip(r) : '';
-            };
             const inStrOf = r => r.audit.inCard ? (r.audit.inCard + (r.audit.inQty > 1 ? 'x' + r.audit.inQty : '')) : (r.inCard || '（空）');
             const outStrOf = r => suikaOutCardsText(r.outCards);
             const reasonStrOf = (s, ri) => {
@@ -4086,7 +4037,7 @@
                 const selfReasons = s.requests.map((r, ri) => reasonStrOf(s, ri)).filter(Boolean);
                 const allReasons = s.requests.flatMap(r => r.audit.reasons || []);
                 // 提交级综合表述（优化B）：不再堆叠 [请求N]，改为组级综合；请求明细折叠仍保留逐条
-                let reasonStr = buildSuikaSummaryReasonWithGuide(s);
+                let reasonStr = buildSuikaSummaryReason(s);
                 if (!reasonStr) reasonStr = status;
                 return `<tr style="background:${meta.bg};">
                     <td>${s.code}</td>
@@ -4096,7 +4047,6 @@
                     <td style="max-width:200px;font-size:12px;">${inStr || '-'}</td>
                     <td style="max-width:260px;font-size:12px;">${outStr || '-'}</td>
                     <td>${badgeHtml(status, meta)}${cardBadgeOf(allReasons)}</td>
-                    <td style="text-align:center;">${suikaEditedBadge(subHasEdit(s), subEditedTip(s))}</td>
                     <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
                     <td style="white-space:nowrap;">
                         <button type="button" class="suikaEditSubBtn suika-op-btn" data-code="${escHtml(s.code)}" style="border:1px solid #6b7280;background:#f9fafb;color:#374151;" title="修改该提交的昵称/姓名/手机号/订单号后重新匹配审核">修改</button>
@@ -4110,7 +4060,7 @@
                 const st = r.audit.type || s.audit.status || '需人工处理';
                 const meta = metaOf(st);
                 const user = s.user;
-                const typeStr = suikaInternalStatusTextOf(r.audit.type || st);
+                const typeStr = r.audit.type || st;
                 const reasonStr = (reasonStrOf(s, ri) || st) + ((r.audit.pass && r.warning) ? '（格式需留意）' : '');
                 const released = r.audit.manuallyReleased;
                 // 修改：编辑换入/换出卡后重新审核（标记 manuallyEdited 供导出备注）
@@ -4130,7 +4080,6 @@
                     <td>${inStrOf(r) || '-'}</td>
                     <td style="max-width:260px;font-size:12px;">${outStrOf(r) || '-'}</td>
                     <td>${badgeHtml(st, meta)}${cardBadgeOf(r.audit.reasons || [])}</td>
-                    <td style="text-align:center;">${suikaEditedBadge(reqHasEdit(r), reqEditedTip(r))}</td>
                     <td style="max-width:320px;font-size:12px;color:${meta.color};">${reasonStr}</td>
                     <td style="white-space:nowrap;">${actionHtml}</td>
                 </tr>`;
@@ -4287,8 +4236,8 @@
                 const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
                 const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => suikaOutCardsText(r.outCards)).join(' ； ');
-                const reasonStr = buildSuikaSummaryReasonWithGuide(s, { html: false });
-                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, suikaInternalStatusTextOf(status), reasonStr, s.submitTime || ''];
+                const reasonStr = buildSuikaSummaryReason(s, { html: false });
+                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
             });
 
             const passHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '用于兑换的卡', '提交时间'];
@@ -4297,7 +4246,7 @@
 
             const passData = byStatus['通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.outStr, r.submitTime]);
             const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
-            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, suikaInternalStatusTextOf(r.audit.type), r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
 
             const wb = XLSX.utils.book_new();
             const mkSheet = (name, headers, data, wideIdx) => {
@@ -4305,10 +4254,10 @@
                 ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 60 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 6, 7]);
+            mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
             mkSheet('通过审核', passHeaders, passData, [6]);
             mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
-            mkSheet('需人工处理', handleHeaders, handleData, [5, 8, 10]);
+            mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
             mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
             XLSX.writeFile(wb, getTimestampFilename('碎卡兑换审核结果'));
         }
@@ -4328,8 +4277,8 @@
                 const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
                 const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => suikaOutCardsText(r.outCards)).join(' ； ');
-                const reasonStr = buildSuikaSummaryReasonWithGuide(s, { html: false });
-                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, suikaInternalStatusTextOf(status), reasonStr, s.submitTime || ''];
+                const reasonStr = buildSuikaSummaryReason(s, { html: false });
+                return [s.code, s.nickname || '', s.phone || '', s.requests.length, inStr, outStr, status, reasonStr, s.submitTime || ''];
             });
 
             const passHeaders = ['提交编号', '昵称', '手机号', '订单号', '兑换类型', '换入卡面', '用于兑换的卡', '提交时间'];
@@ -4338,7 +4287,7 @@
 
             const passData = byStatus['通过'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.audit.type, r.inCard, r.outStr, r.submitTime]);
             const notFoundData = byStatus['未找到用户'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.inCard, r.outStr, r.audit.reasons.join('；'), r.submitTime]);
-            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, suikaInternalStatusTextOf(r.audit.type), r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
+            const handleData = byStatus['需人工处理'].map(r => [r.code, r.nickname, r.phone, r.orderNo, r.ri, r.audit.type, r.inCard, r.inQty, r.outStr, r.totalOut, r.audit.reasons.join('；'), r.submitTime]);
 
             const mkSheet = async (name, headers, data, wideIdx) => {
                 // 数据量较大时分片让出主线程（每 2000 行让一次）
@@ -4349,10 +4298,10 @@
                 ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 60 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            await mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 6, 7]);
+            await mkSheet('提交级汇总', summaryHeaders, summaryData, [4, 5, 7]);
             await mkSheet('通过审核', passHeaders, passData, [6]);
             await mkSheet('未找到用户', notFoundHeaders, notFoundData, [6, 7]);
-            await mkSheet('需人工处理', handleHeaders, handleData, [5, 8, 10]);
+            await mkSheet('需人工处理', handleHeaders, handleData, [8, 10]);
             await mkSheet('碎卡兑换获得卡汇总', ['卡面编号', '稀有度', '获得张数', '占比'], buildSuikaGainSummary());
             // 修改与放行记录 Sheet（复用修改记录+人工放行数据；无记录时放一行说明文字）
             // 兼容来豹导出：exportLaibaoOnly 已在同一 wb 预添加「修改与放行记录」，此处重复添加会触发
@@ -4425,7 +4374,7 @@
                 const status = sAudit.status || (sAudit.pass ? '通过' : '需人工处理');
                 const inStr = s.requests.map(r => { const ra = r.audit || {}; return ra.inCard ? (ra.inCard + ((ra.inQty || 0) > 1 ? 'x' + ra.inQty : '')) : (r.inCard || '（空）'); }).join('、');
                 const outStr = s.requests.map(r => suikaOutCardsText(r.outCards)).join(' ； ');
-                const reasonStr = buildSuikaSummaryReasonWithGuide(s, { html: false })
+                const reasonStr = buildSuikaSummaryReason(s, { html: false })
                     || (status === '通过' ? '通过' : (s.audit.blockedFrom ? `同手机号其他提交需人工处理（${s.audit.blockedFrom}）` : status));
                 return [s.code, s.nickname || '', s.name || '', s.phone || '', s.orderNo || '', s.submitTime || '', inStr, outStr, status, reasonStr, suikaRemarkOf(s, phoneToAccounts)];
             });
@@ -4468,17 +4417,15 @@
             if (gainData.length === 0) gainData.push(['（无通过记录）', 0, 0]);
             gainData.push(['合计', totalQty, gainUsers.size]);
             const wb = XLSX.utils.book_new();
-            // 对外输出：审核状态列（索引 8）按对客文案渲染；分组过滤仍在原始数据上完成
-            const pubRows = rows => rows.map(r => r.map((c, i) => i === 8 ? suikaCustomerStatusTextOf(c) : c));
             const mkSheet = (name, headers, data, wideIdx) => {
                 const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
                 ws['!cols'] = headers.map((h, i) => ({ wch: (wideIdx && wideIdx.indexOf(i) >= 0) ? 50 : 16 }));
                 XLSX.utils.book_append_sheet(wb, ws, name);
             };
-            mkSheet('全部提交', allHeaders, pubRows(allData), [6, 7, 8, 9]);
+            mkSheet('全部提交', allHeaders, allData, [6, 7, 9]);
             mkSheet('通过审核', passHeaders, passData, [4]);
-            mkSheet('未找到用户', allHeaders, pubRows(allData.filter(r => r[8] === '未找到用户')), [6, 7, 9]);
-            mkSheet('需人工处理', allHeaders, pubRows(allData.filter(r => r[8] === '需人工处理')), [6, 7, 8, 9]);
+            mkSheet('未找到用户', allHeaders, allData.filter(r => r[8] === '未找到用户'), [6, 7, 9]);
+            mkSheet('需人工处理', allHeaders, allData.filter(r => r[8] === '需人工处理'), [6, 7, 9]);
             mkSheet('获得卡汇总', ['换入卡卡面', '兑换数量(张)', '涉及用户数'], gainData, []);
             XLSX.writeFile(wb, getTimestampFilename('碎卡来豹接龙表'));
         }
@@ -4611,11 +4558,11 @@
         // 集赞导出「原因明细」大白话映射（与处理状态同源，展示口径见导出导入结果汇总）
         function jizanReasonTextOf(e) {
             if (!e) return '';
-            if (e.sheet === 'fail' || e.manualStatus === 'abnormal') return '审核未通过' + GUIDE_QUESTIONNAIRE_TAIL;
-            if (!e.matched) return '未匹配到订单，请联系客服';
-            if (e.ambiguous) return '同号多账号，请联系客服确认归属';
-            if (e.missingInfo) return '填写不完整，请联系客服';
-            if (e.manualStatus === 'pending') return (e.sheet === 'repeat' ? '重复填写问卷，请联系客服确认' : '待确认，请联系客服');
+            if (e.sheet === 'fail' || e.manualStatus === 'abnormal') return '审核未通过，请联系客服';
+            if (!e.matched) return '手机号+订单号未匹配到下单用户';
+            if (e.ambiguous) return '同号多账号，订单号未命中，需确认归属';
+            if (e.missingInfo) return '未填写订单号/卡面编号，需人工核实';
+            if (e.manualStatus === 'pending') return (e.sheet === 'repeat' ? '重复填写问卷，请联系客服确认' : '需人工确认，请联系客服');
             if (e.sheet === 'repeat' && jizanStatusTextOf(e) !== '成功') return '重复填写问卷，请联系客服确认';
             return '手机号+订单号匹配成功';
         }
@@ -4631,10 +4578,10 @@
             if (!tb) return;
             const rows = [];
             (suikaSubmissions || []).forEach(s => {
-                suikaHistRows(s).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.nickname || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] }));
-                (s.requests || []).forEach(r => suikaHistRows(r).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.nickname || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] })));
+                suikaHistRows(s).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] }));
+                (s.requests || []).forEach(r => suikaHistRows(r).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', s.phone || '-', s.code || '', h.type || '修改', h.content || '-', h.note || '-'] })));
             });
-            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:14px;">暂无修改/放行记录</td></tr>'; return; }
+            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:14px;">暂无修改/放行记录</td></tr>'; return; }
             rows.sort((a, b) => String(a.sort).localeCompare(String(b.sort)));
             tb.innerHTML = rows.map(r => '<tr>' + r.cells.map(c => '<td>' + escHtml(c) + '</td>').join('') + '</tr>').join('');
         }
@@ -4643,8 +4590,8 @@
             const tb = document.getElementById('jizanHistoryBody');
             if (!tb) return;
             const rows = [];
-            (jizanExportData || []).forEach(e => jizanHistRows(e).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', e.wechat || '-', e.phone || '-', jizanSheetNameOf(e.sheet), h.type || '修改', h.content || '-', h.note || '-'] })));
-            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:14px;">暂无修改记录</td></tr>'; return; }
+            (jizanExportData || []).forEach(e => jizanHistRows(e).forEach(h => rows.push({ sort: h.at || '', cells: [h.at || '-', e.phone || '-', jizanSheetNameOf(e.sheet), h.type || '修改', h.content || '-', h.note || '-'] })));
+            if (rows.length === 0) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:14px;">暂无修改记录</td></tr>'; return; }
             rows.sort((a, b) => String(a.sort).localeCompare(String(b.sort)));
             tb.innerHTML = rows.map(r => '<tr>' + r.cells.map(c => '<td>' + escHtml(c) + '</td>').join('') + '</tr>').join('');
         }
@@ -4661,56 +4608,34 @@
             const el = document.getElementById('suikaEditModalWrap');
             if (el) el.remove();
         }
-        // 页面右上角「📖 使用说明」弹窗：按「普通管理员 / 超级管理员」分 Tab 展示（复用 suikaModalShell 自绘弹窗）
-        function usageShowTab(kind) {
-            const n = document.getElementById('usagePanelNormal');
-            const s = document.getElementById('usagePanelSuper');
-            const tn = document.getElementById('usageTabNormal');
-            const ts = document.getElementById('usageTabSuper');
-            if (!n || !s) return;
-            n.style.display = (kind === 'normal') ? 'block' : 'none';
-            s.style.display = (kind === 'super') ? 'block' : 'none';
-            const base = 'padding:7px 14px;border:none;border-radius:18px;font-size:13px;font-weight:bold;cursor:pointer;';
-            if (tn) tn.style.cssText = base + ((kind === 'normal') ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;');
-            if (ts) ts.style.cssText = base + ((kind === 'super') ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;');
-        }
+        // 页面右上角「📖 使用说明」弹窗：四步操作引导（复用 suikaModalShell 自绘弹窗）
         function showUsageGuide() {
-            const stepBox = (num, title, linesHtml, tipHtml) => `
+            const stepBox = (num, title, linesHtml) => `
                 <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
                     <div style="font-weight:bold;font-size:14px;color:#20517d;margin-bottom:6px;">${num}、${title}</div>
                     <div style="font-size:13px;line-height:1.9;color:#333;">${linesHtml}</div>
-                    ${tipHtml || ''}
                 </div>`;
             const li = (html) => `<div style="padding-left:2px;">${html}</div>`;
-            const tip = (html) => `<div style="margin-top:7px;padding:6px 10px;background:#fff7e6;border:1px solid #ffe1a6;border-radius:8px;font-size:12px;line-height:1.8;color:#7c4a03;">💡 ${html}</div>`;
-            const warn = (html) => `<div style="margin-top:7px;padding:6px 10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12px;line-height:1.8;color:#991b1b;">⚠️ ${html}</div>`;
-            // —— 普通管理员说明 ——
-            const normalHtml =
-                stepBox('1', '登录与账号安全', li('① 使用对接人发给您的<code>账号密码</code>登录；') + li('② 密码属于内部信息，请勿转发给无关人员；') + li('③ 换班/下班请点右上角「退出」，避免他人误用您的账号。'))
-                + stepBox('2', '导入数据（每天第一步）', li('① 上传<code>主数据 Excel（订单数据）</code>，点击「开始分析」（订单大表仅在您自己电脑上分析，<b>不会上传云端</b>）；') + li('② 有碎卡兑换时：上传<code>碎卡记录</code>，点击「开始导入」；') + li('③ 有集赞兑换时：上传<code>集赞兑换表</code>，点击「开始导入」。') + li('④ 三类数据可同时存在页面中，各自独立处理。'), tip('重复导入会覆盖本地同类数据。如需保留上一版，请先导出备份，再重新导入。'))
-                + stepBox('3', '碎卡兑换审核', li('<b>修改</b>：用户填错或需调整时，点行尾「修改」修正（系统自动留痕）；') + li('<b>放行</b>：确认无误但被规则卡住的记录，点「放行」；') + li('<b>导出审核结果 Excel</b>：完整审核明细，发货用；') + li('<b>导出未匹配用户清单</b>：找不到下单人的，需私信核实后处理；') + li('<b>导出修改记录</b>：客服所有改动留痕，对账用。'))
-                + stepBox('4', '集赞兑换核对', li('<b>明细行「修改」</b>：联系用户确认后修正手机号/卡面/状态（会留痕）；') + li('<b>导出集赞导入结果 Excel</b>：内部完整版（含全部明细 + 修改记录）；') + li('<b>导出来豹接龙查询表</b>：发给用户自助查询的表（含集赞修改记录）；') + li('<b>导出集赞核心信息查询表</b>：精简版，适合快速核对。'))
-                + stepBox('5', '换班交接：保存与拉取', li('<b>下班/交班前</b>：点右上角「⬆ 保存到云端」，把本班审核结果上传；') + li('<b>接班时</b>：点右上角「⬇ 拉取记录合并」，把云端上一班记录并入当前页面（只增改不删除）；') + li('<b>保存/拉取成功后</b>：右下角浮窗会显示最新保存时间与账号，可核对是否轮到您。'), tip('云端同步的是<b>碎卡审核 + 集赞兑换</b>这类小表；订单大表留在各自电脑本地，不上云端。'))
-                + stepBox('6', '查看修改历史与凭证', li('<b>页面下方「修改历史」</b>：每次修改/放行的完整时间线（按时间倒序）；') + li('<b>所有导出 Excel 的备注/记录 Sheet</b>：事后对账凭证。'))
-                + stepBox('7', '常见问题', li('<b>保存/拉取失败</b>：多为网络波动，点「拉取记录合并」或「保存到云端」重试；仍失败请截图给管理员；') + li('<b>看不到云端日志等按钮</b>：属正常现象，那些是超级管理员专属功能；') + li('<b>不确定当前页面是不是最新</b>：接班先「拉取记录合并」，下班前确认「保存到云端」成功。'));
-            // —— 超级管理员说明 ——
-            const superHtml =
-                stepBox('1', '账号体系', li('<b>超级管理员</b>：ad001（及备用 s1）——唯一能看到下方「☰ 更多」里的云端管理功能；') + li('<b>普通管理员</b>：ad002 ~ ad005——只负责日常审核与交接，看不到云端管理入口。'))
-                + stepBox('2', '顶部按钮布局（本次优化后）', li('常驻按钮：<code>⬆ 保存到云端</code>、<code>⬇ 拉取记录合并</code>（所有角色都有）；') + li('低频/管理操作收进 <code>☰ 更多</code> 下拉：以本地覆盖云端、清空云端审核数据、云端日志、退出登录；') + li('点击「☰ 更多」展开菜单，点菜单外空白处或再次点击按钮可收起。'))
-                + stepBox('3', '云端日志（紫色）', li('<b>作用</b>：查看最近 200 条云端操作记录（谁在何时保存/覆盖/清空）；') + li('<b>筛选</b>：按账号、日期、关键字筛选；') + li('<b>删除</b>：可单条删除；「清空全部」会保留一条“清空日志”的审计记录，方便追责。'), tip('轮班期间如发现异常保存/覆盖，优先查云端日志定位账号与时间。'))
-                + stepBox('4', '以本地覆盖云端（橙色）', li('<b>适用场景</b>：本地这份数据才是权威版本，需要整份替换云端时（例如修复一批脏数据后）；') + li('<b>与「拉取合并」的区别</b>：拉取是“并入”，覆盖是“替换”；覆盖不会先拉取云端再合并。'), warn('危险操作：云端旧记录会被本页数据整份替换且<b>不可恢复</b>。执行前务必先导出本地备份，再点确定。'))
-                + stepBox('5', '清空云端审核数据（红色）', li('<b>适用场景</b>：彻底重置云端小表（如清理测试脏数据）；') + li('<b>影响范围</b>：仅清空云端的碎卡审核/集赞记录（写为空快照）；账号、云端日志、各电脑本地数据均不受影响。'), warn('执行后有二次确认弹窗；清空后如需恢复，请让有本地备份的人点「以本地覆盖云端」重新上传。'))
-                + stepBox('6', '账号管理建议', li('<b>超管账号</b>只交给总负责人；普通管理员账号按人分配、不混用；') + li('密码建议私聊发送、定期更换；不要在公用电脑上保持登录状态；') + li('发现普通管理员有越权/误操作嫌疑时，用「云端日志」核对操作记录。'));
-            const isSuperNow = !!(window.cloudIsSuper && cloudIsSuper());
-            const tabBtn = (id, label, act) => {
-                const on = (act === 'normal') ? !isSuperNow : isSuperNow;
-                return `<button type="button" id="${id}" onclick="usageShowTab('${act}')" style="padding:7px 14px;border:none;border-radius:18px;font-size:13px;font-weight:bold;cursor:pointer;${on ? 'background:#20517d;color:#fff;' : 'background:#eef2f7;color:#64748b;'}">${label}</button>`;
-            };
             const bodyHtml =
-                '<div style="display:flex;gap:8px;margin-bottom:12px;">' + tabBtn('usageTabNormal', '📘 普通管理员说明', 'normal') + tabBtn('usageTabSuper', '👑 超管专属说明', 'super') + '</div>'
-                + '<div id="usagePanelNormal" style="display:' + (isSuperNow ? 'none' : 'block') + ';">' + normalHtml + '</div>'
-                + '<div id="usagePanelSuper" style="display:' + (isSuperNow ? 'block' : 'none') + ';">' + superHtml + '</div>';
-            suikaOpenEditModal(suikaModalShell('📖 使用说明', bodyHtml, '', 'suikaCloseEditModal()', 800));
+                stepBox('第一步', '导入数据（按顺序）',
+                    li('① 上传主数据 Excel（订单数据），点击「开始分析」；') +
+                    li('② 有碎卡兑换时：上传碎卡记录，点击「开始导入」；') +
+                    li('③ 有集赞兑换时：上传集赞兑换表，点击「开始导入」。'))
+                + stepBox('第二步', '碎卡兑换审核',
+                    li('<b>修改</b>：用户填错或需调整时，点行尾「修改」修正（留痕）；') +
+                    li('<b>放行</b>：确认无误但被卡住的记录，点「放行」；') +
+                    li('<b>导出审核结果 Excel</b>：完整审核明细，发货用；') +
+                    li('<b>导出未匹配用户清单</b>：找不到下单人的需私信核实；') +
+                    li('<b>导出修改记录</b>：客服所有改动留痕，对账用。'))
+                + stepBox('第三步', '集赞兑换核对',
+                    li('<b>明细行「修改」</b>：联系用户确认后修正手机号/卡面/状态（会留痕）；') +
+                    li('<b>导出集赞导入结果 Excel</b>：内部完整版（含全部明细 + 修改记录）；') +
+                    li('<b>导出来豹接龙查询表</b>：发给用户自助查询的表（含集赞修改记录）；') +
+                    li('<b>导出集赞核心信息查询表</b>：精简版。'))
+                + stepBox('第四步', '看记录',
+                    li('<b>页面下方「修改历史」</b>：每次修改/放行的完整时间线；') +
+                    li('<b>所有导出 Excel 的备注/记录 Sheet</b>：事后对账凭证。'));
+            suikaOpenEditModal(suikaModalShell('📖 使用说明', bodyHtml, '', 'suikaCloseEditModal()', 760));
         }
         function suikaModalShell(titleHtml, bodyHtml, saveOnclick, closeFn, modalWidth) {
             const closeCode = closeFn || 'suikaCloseEditModal()';
@@ -4868,7 +4793,7 @@
             }
             suikaCloseEditModal();
             reauditAllSubmissions(subChanged ? new Set([String(code)]) : undefined);
-            alert(`已保存并重新审核：提交 ${code} 请求 ${ri + 1} → ${suikaInternalStatusTextOf(req.audit.type)}`);
+            alert(`已保存并重新审核：提交 ${code} 请求 ${ri + 1} → ${req.audit.type}`);
         }
         // 功能2b：提交汇总行「修改」弹窗（编辑昵称/姓名/手机号/订单号）
         function suikaOpenEditSubModal(code) {
@@ -4951,7 +4876,6 @@
                     } else {
                         wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
                     }
-                    if (window.__marvisEnqueueBackup) { window.__marvisEnqueueBackup(likeFile); window.__marvisFlushBackup(); } // 解析成功即自动备份原文件
                     const likePrevData = Array.isArray(likeExchangeData) ? likeExchangeData.slice() : [];
                     const parsed = parseLikeWorkbook(wb);
                     if (!parsed.rows.length) { alert('未在「' + (parsed.sheetName || '首个Sheet') + '」中读取到有效数据，请确认表内 A 列为 CCL 订单号、B 列为兑换卡编号'); return; }
@@ -5462,15 +5386,9 @@
                 } else {
                     wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
                 }
-                window.__marvisEnqueueBackup(jizanFile); window.__marvisFlushBackup(); // 解析成功即自动备份原文件
-                const jizanPrevData = (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData.slice() : [];
                 const parsed = parseJizanWorkbook(wb);
                 applyJizan(parsed);
-                // 重传/换批次时把本地已有的人工处理结果（人工状态/修改历史/人工指定归属）按 来源Sheet+手机号+订单号+卡面 贴回新行
-                jizanPreserveManual(jizanPrevData, jizanExportData);
-                if (typeof renderJizanDetail === 'function') renderJizanDetail();
-                if (typeof renderJizanSummary === 'function' && typeof buildJizanSummaryFromExport === 'function') renderJizanSummary(buildJizanSummaryFromExport(), true);
-                // 不再“导入即自动保存到云端”：重导只更新本地页面并保留人工成果，避免把无历史状态整份回写云端；确认无误后手动点「保存到云端」
+                queueCloudSave();
             } catch (err) {
                 alert('集赞兑换表解析失败：' + err.message);
             } finally {
@@ -5601,13 +5519,13 @@
             });
             const tbody = document.getElementById('jizanFailBody');
             tbody.innerHTML = failRows.length > 0
-                ? failRows.map(f => `<tr><td>${f.sheet}</td><td>${f.key}</td><td>${f.card}</td><td>未匹配到订单，请联系客服</td></tr>`).join('')
+                ? failRows.map(f => `<tr><td>${f.sheet}</td><td>${f.key}</td><td>${f.card}</td><td>未匹配到用户</td></tr>`).join('')
                 : '<tr><td colspan="4" style="text-align:center;color:#999;">无匹配失败</td></tr>';
 
             const ambBody = document.getElementById('jizanAmbBody');
             if (ambBody) {
                 ambBody.innerHTML = ambiguousRows.length > 0
-                    ? ambiguousRows.map(e => `<tr><td>${sheetNames[e.sheet] || e.sheet}</td><td>${e.phone}</td><td>${e.orderNo}</td><td>${e.card}</td><td>${e.wechat}</td><td>${e.ambiguous ? (e.accounts && e.accounts.length > 1 ? '同号多账号：' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') + '，请联系客服确认归属' : '同号多账号，请联系客服确认归属') : ''}${e.missingInfo ? (e.ambiguous ? '；' : '') + '填写不完整，请联系客服' : ''}</td></tr>`).join('')
+                    ? ambiguousRows.map(e => `<tr><td>${sheetNames[e.sheet] || e.sheet}</td><td>${e.phone}</td><td>${e.orderNo}</td><td>${e.card}</td><td>${e.wechat}</td><td>${e.ambiguous ? (e.accounts && e.accounts.length > 1 ? '同号多账号：' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') : '同号多账号，订单号未命中') : ''}${e.missingInfo ? (e.ambiguous ? '；' : '') + '未填写订单号/卡面编号' : ''}</td></tr>`).join('')
                     : '<tr><td colspan="6" style="text-align:center;color:#999;">无待人工确认项</td></tr>';
             }
 
@@ -5617,7 +5535,7 @@
                 if (ambiguousRows.length > 30) msg += `\n...等共 ${ambiguousRows.length} 条`;
             }
             if (failRows.length > 0) {
-                msg += `\n\n未匹配到订单（请联系客服）${failRows.length} 条：\n` + failRows.slice(0, 30).map(f => `${f.sheet}：${f.key}`).join('\n');
+                msg += `\n\n匹配失败 ${failRows.length} 条：\n` + failRows.slice(0, 30).map(f => `${f.sheet}：${f.key}`).join('\n');
                 if (failRows.length > 30) msg += `\n...等共 ${failRows.length} 条`;
             }
             renderJizanDetail();
@@ -5631,12 +5549,11 @@
         // 处理状态：客服手动状态(manualStatus: success/pending/abnormal)优先，否则按原派生逻辑
         function jizanStatusTextOf(e) {
             if (e.manualStatus === 'success') return '成功';
-            if (e.manualStatus === 'pending') return '待确认，请联系客服';
+            if (e.manualStatus === 'pending') return '需人工确认，请联系客服';
             if (e.manualStatus === 'abnormal') return '异常，请联系客服';
-            if (!e.matched) return '未匹配到订单，请联系客服';
+            if (!e.matched) return '失败';
             if (e.sheet === 'fail') return '异常，请联系客服';
-            if (e.ambiguous) return '同号多账号，请联系客服确认归属';
-            if (e.missingInfo) return '填写不完整，请联系客服';
+            if (e.ambiguous || e.missingInfo) return '需人工确认，请联系客服';
             return '成功';
         }
         // 宣传集赞礼展示值：与「集赞汇总 / 主表 / 导出」同口径
@@ -5683,7 +5600,7 @@
                 ? '<tr><td colspan="9" style="text-align:center;color:#999;">暂无导入记录</td></tr>'
                 : rows.map((e, idx) => {
                     const st = jizanStatusTextOf(e);
-                    const stColor = st === '成功' ? '#059669' : (st.indexOf('异常') >= 0 || st.indexOf('未匹配到订单') >= 0 || st === '失败' ? '#ef4444' : '#d97706');
+                    const stColor = st === '成功' ? '#059669' : (st.indexOf('异常') >= 0 || st === '失败' ? '#ef4444' : '#d97706');
                     const mark = e.manuallyEdited ? ' <span style="color:#2563eb;font-size:11px;" title="修改时间：' + escAttr(e.editedAt || '') + (e.editedNote ? '；原因：' + escAttr(e.editedNote) : '') + '">✎已改</span>' : '';
                     const remark = String(e.note || '').trim();
                     const check = String(e.check || '').trim();
@@ -5695,7 +5612,7 @@
                         <td>${escHtml(e.card || '')}</td>
                         <td style="color:${stColor};">${st}</td>
                         <td>${escHtml(e.wechat || '')}</td>
-                        <td style="max-width:340px;white-space:normal;font-size:12px;">${escHtml(jizanGiftCustomerTextOf(jizanGiftDispOf(e)))}</td>
+                        <td>${escHtml(jizanGiftDispOf(e))}</td>
                         <td style="max-width:280px;font-size:12px;">${remarkStr ? escHtml(remarkStr) : ''}${mark}</td>
                         <td style="white-space:nowrap;">${jizanEditBtnHtml(idx)}</td>
                     </tr>`;
@@ -5709,7 +5626,7 @@
             const statusOpts = [
                 ['', '自动判定（按来源Sheet与匹配情况）'],
                 ['success', '成功（已确认可发放）'],
-                ['pending', '待确认，请联系客服（继续待核实）'],
+                ['pending', '需人工确认（继续待核实）'],
                 ['abnormal', '异常，不发放']
             ].map(o => `<option value="${o[0]}" ${(e.manualStatus || '') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('');
             const bodyHtml = `
@@ -5750,7 +5667,7 @@
             const cardNorm = normalizeCardId(card);
             if (status === 'success' && !cardNorm) { alert('状态为「成功」时必须填写有效卡面编号（如 SR12 / SSR8）'); return; }
             if (card && !cardNorm) { alert('卡面编号无法识别，请填写如 SR12 / SSR8；若确认不发放请留空'); return; }
-            const stTxt = m => m === 'success' ? '成功' : (m === 'pending' ? '待确认，请联系客服' : (m === 'abnormal' ? '异常，不发放' : '自动'));
+            const stTxt = m => m === 'success' ? '成功' : (m === 'pending' ? '需人工确认' : (m === 'abnormal' ? '异常，不发放' : '自动'));
             const oldStatus = e.manualStatus || '';
             const editedContent = [];
             const chk = (label, a, b) => { if (String(a) !== String(b)) editedContent.push(label + '：' + (a === '' ? '（空）' : a) + ' → ' + (b === '' ? '（空）' : b)); };
@@ -5806,43 +5723,43 @@
         // 共享数据：生成"集赞修改记录"Sheet 的行数据（集赞导入结果 / 来豹接龙查询表导出共用）
         // 兼容说明：即使集赞记录未匹配到 userData（matched=false / wechat 为空），只要 jizanExportData 存在即展示该行修改
         function buildJizanEditLogSheet() {
-            const headers = ['来源Sheet', '昵称', '手机号', '订单号', '修改内容', '修改原因', '修改时间'];
+            const headers = ['来源Sheet', '手机号', '订单号', '修改内容', '修改原因', '修改时间'];
             const data = [];
             (jizanExportData || []).forEach(e => {
                 jizanHistRows(e).forEach(h => {
-                    data.push([jizanSheetNameOf(e.sheet), e.wechat || '', e.phone || '', e.orderNo || '', h.content || '-', h.note || '-', h.at || '-']);
+                    data.push([jizanSheetNameOf(e.sheet), e.phone || '', e.orderNo || '', h.content || '-', h.note || '-', h.at || '-']);
                 });
             });
-            if (data.length === 0) data.push(['（暂无集赞修改记录）', '', '', '', '', '', '']);
+            if (data.length === 0) data.push(['（暂无集赞修改记录）', '', '', '', '', '']);
             return { headers, data };
         }
         function exportJizanResult() {
             if (!jizanExportData) { alert('请先导入集赞兑换表'); return; }
             const wb = XLSX.utils.book_new();
             const h1 = ['下单账号', '手机号', '宣传集赞礼'];
-            const d1 = userData.map(u => [u.wechat || '', u.phone || '', jizanGiftCustomerTextOf(u.xuanchuanGift) || '未参与']);
+            const d1 = userData.map(u => [u.wechat || '', u.phone || '', u.xuanchuanGift || '无']);
             const ws1 = XLSX.utils.aoa_to_sheet([h1, ...d1]);
-            ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 36 }];
+            ws1['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, ws1, '宣传集赞礼全量');
             const h2 = ['来源Sheet', '手机号', '订单号', '卡面编号', '处理状态', '原因明细', '匹配用户', '宣传集赞礼', '备注'];
             const d2 = jizanExportData.map(e => {
                 let status = jizanStatusTextOf(e);
-                if (status === '失败') status = '未匹配到订单，请联系客服';
+                if (status === '失败') status = '失败，请联系客服';
                 const reason = jizanReasonTextOf(e);
                 let remark = '';
                 if (e.ambiguous) {
                     remark = e.accounts && e.accounts.length > 1
-                        ? '⚠ 同号多账号(' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') + ')，订单号未命中，请联系客服确认归属'
-                        : '⚠ 同号多账号，订单号未命中，请联系客服确认归属';
+                        ? '⚠ 同号多账号(' + e.accounts.slice(0, 3).join('/') + (e.accounts.length > 3 ? '等' + e.accounts.length + '个' : '') + ')，订单号未命中，请人工确认归属账号'
+                        : '⚠ 同号多账号，订单号未命中，请人工确认归属账号';
                 }
-                if (e.missingInfo) remark = (remark ? remark + '；' : '') + '填写不完整，请联系客服';
+                if (e.missingInfo) remark = (remark ? remark + '；' : '') + '未填写订单号/卡面编号，请人工核实';
                 if (e.sheet === 'fail' && (e.note || e.check)) remark = (remark ? remark + '；' : '') + '核查=' + (e.check || '-') + (e.note ? '，' + e.note : '');
                 if (e.manuallyEdited) remark = (remark ? remark + '；' : '') + '客服已修改(' + (e.editedAt || '') + ')' + (e.editedNote ? '：' + e.editedNote : '');
-                const giftDisp = jizanGiftCustomerTextOf(jizanGiftDispOf(e));
+                const giftDisp = jizanGiftDispOf(e);
                 return [e.sheet, e.phone, e.orderNo, e.card, status, reason, e.wechat, giftDisp, remark];
             });
             const ws2 = XLSX.utils.aoa_to_sheet([h2, ...d2]);
-            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 42 }, { wch: 24 }, { wch: 36 }, { wch: 42 }];
+            ws2['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 30 }, { wch: 24 }, { wch: 18 }, { wch: 42 }];
             XLSX.utils.book_append_sheet(wb, ws2, '导入结果汇总');
             const h3 = ['卡面编号', '稀有度', '数量', '其中待核实', '占比'];
             const d3 = buildJizanGiftSummary();
@@ -5853,12 +5770,12 @@
             const ws4 = userData && userData.length > 0
                 ? exportLaibaoSheet()
                 : XLSX.utils.aoa_to_sheet([['未上传主数据，无法生成来豹接龙查询表']]);
-            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 34 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
+            ws4['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 26 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 22 }, { wch: 40 }, { wch: 14 }];
             XLSX.utils.book_append_sheet(wb, ws4, '来豹接龙查询表');
             // 集赞修改记录：所有被客服修改过的集赞记录，每行一次修改（时间正序）——复用独立构造函数
             const { headers: h5, data: d5 } = buildJizanEditLogSheet();
             const ws5 = XLSX.utils.aoa_to_sheet([h5, ...d5]);
-            ws5['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
+            ws5['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
             XLSX.utils.book_append_sheet(wb, ws5, '集赞修改记录');
             XLSX.writeFile(wb, getTimestampFilename('集赞导入结果'));
         }
@@ -5875,7 +5792,7 @@
                 (suikaAuditMap[k] || []).forEach(s => {
                     const status = s.audit.status || (s.audit.pass ? '通过' : '需人工处理');
                     const color = suikaMeta[status] || '#ca8a04';
-                    const detail = s.requests.map(r => suikaInternalStatusTextOf(r.audit.type) + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
+                    const detail = s.requests.map(r => r.audit.type + (r.audit.reasons.length ? '（' + r.audit.reasons.join('；') + '）' : '')).join('；');
                     suikaLines.push(`<div style="font-size:12px;line-height:1.7;color:${color};"><span style="color:#818cf8;">[${k}]</span>【${s.code}】${status}：${detail}</div>`);
                 });
             });
@@ -5884,8 +5801,8 @@
                 : '<div style="color:#999;font-size:12px;">未导入碎卡兑换表或无该用户记录</div>';
 
             const giftHtml = user.xuanchuanGift && user.xuanchuanGift !== '无'
-                ? `<span style="color:#059669;font-weight:bold;max-width:320px;display:inline-block;white-space:normal;">${jizanGiftCustomerTextOf(user.xuanchuanGift)}</span>`
-                : '<span style="color:#999;">未参与</span>';
+                ? `<span style="color:#059669;font-weight:bold;">${user.xuanchuanGift}</span>`
+                : '<span style="color:#999;">无</span>';
 
             const mergedBadge = merged
                 ? `<span style="display:inline-block;background:#eef2ff;color:#4f46e5;padding:2px 10px;border-radius:10px;font-size:12px;margin-left:8px;" title="已按手机号聚合 ${(user.mergedFrom || []).join('、')}">已合并${(user.mergedFrom || []).length}个账号</span>`
@@ -5894,7 +5811,7 @@
                 ? `<div style="font-size:12px;color:#818cf8;margin-top:4px;">来源账号：${(user.mergedFrom || []).join('、')}（以下统计已按手机号自动合并）</div>`
                 : '';
 
-            const weekendGet = ((user.weekendRandomCount > 0 ? '随机×' + user.weekendRandomCount : '') + (user.weekendUniqueCount > 0 ? (user.weekendRandomCount > 0 ? '、' : '') + '不重复×' + user.weekendUniqueCount : ''))
+            const weekendGet = ((user.weekendRandomCount > 0 ? '周末活动随机×' + user.weekendRandomCount : '') + (user.weekendUniqueCount > 0 ? (user.weekendRandomCount > 0 ? '、' : '') + '周末活动不重复×' + user.weekendUniqueCount : ''))
                 || (user.weekendCondition && String(user.weekendCondition).includes('未达标') ? '未达标' : '-');
             const romanceGet = ((user.romanceRandomCount > 0 ? '随机×' + user.romanceRandomCount : '') + (user.romanceUniqueCount > 0 ? (user.romanceRandomCount > 0 ? '、' : '') + '不重复×' + user.romanceUniqueCount : ''))
                 || (user.romanceCondition && String(user.romanceCondition).includes('未达标') ? '未达标' : '-');
@@ -5912,8 +5829,8 @@
                         <button onclick="window.__detailUser && showOrderModal(window.__detailUser)" style="margin-top:6px;border:1px solid #20517d;background:#fff;color:#20517d;padding:4px 12px;border-radius:8px;font-size:12px;cursor:pointer;">📦 查看订单明细</button></div>
                     <div><div style="font-size:11px;color:#999;">订单数</div><div style="font-weight:bold;">${user.orderCount || 0}</div></div>
                     <div><div style="font-size:11px;color:#999;">总抽数</div><div style="font-weight:bold;color:#20517d;">${user.totalDraws || 0}</div></div>
-                    <div><div style="font-size:11px;color:#999;">周末活动抽数</div><div style="font-weight:bold;color:#d97706;">${user.weekendDraws || 0}${user.weekendCardCount ? '（周末小卡' + user.weekendCardCount + '张）' : ''}</div></div>
-                    <div><div style="font-size:11px;color:#999;">周末获得</div><div>${weekendGet}</div></div>
+                    <div><div style="font-size:11px;color:#999;">周末活动抽数</div><div style="font-weight:bold;color:#d97706;">${user.weekendDraws || 0}${user.weekendCardCount ? '（周末活动小卡' + user.weekendCardCount + '张）' : ''}</div></div>
+                    <div><div style="font-size:11px;color:#999;">周末活动获得</div><div>${weekendGet}</div></div>
                     <div><div style="font-size:11px;color:#999;">浪漫疯子抽数</div><div>${user.romanceDraws || 0}${user.romanceCardCount ? '（小卡' + user.romanceCardCount + '张）' : ''}</div></div>
                     <div><div style="font-size:11px;color:#999;">浪漫获得</div><div>${romanceGet}</div></div>
                     <div><div style="font-size:11px;color:#999;">终极活动抽数</div><div>${user.finalDraws || 0}${user.finalEffectiveDraws ? '（有效' + user.finalEffectiveDraws + '）' : ''}</div></div>
@@ -6007,36 +5924,25 @@
         var CLOUD_TOKEN_KEY = 'gacha_order_cloud_token';
         var CLOUD_USER_KEY = 'gacha_order_cloud_user';
         var CLOUD_REMEMBER_KEY = 'gacha_order_cloud_remember';
-var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
 
         // 记住我：勾选 -> token 存 localStorage（下次打开自动进入）；未勾选 -> 存 sessionStorage（关闭浏览器即失效，需重新登录）
         function cloudRememberEnabled() { try { return localStorage.getItem(CLOUD_REMEMBER_KEY) === '1'; } catch (e) { return false; } }
         function cloudGetToken() { try { return (cloudRememberEnabled() ? localStorage : sessionStorage).getItem(CLOUD_TOKEN_KEY) || ''; } catch (e) { return ''; } }
         function cloudGetUser() { try { return (cloudRememberEnabled() ? localStorage : sessionStorage).getItem(CLOUD_USER_KEY) || ''; } catch (e) { return ''; } }
-        function cloudGetRole() { try { return (cloudRememberEnabled() ? localStorage : sessionStorage).getItem(CLOUD_ROLE_KEY) || ''; } catch (e) { return ''; } }
-        function cloudSetRole(role) {
-            try {
-                const store = cloudRememberEnabled() ? localStorage : sessionStorage;
-                if (role) store.setItem(CLOUD_ROLE_KEY, role); else store.removeItem(CLOUD_ROLE_KEY);
-                cloudRebuildTopBar();
-            } catch (e) {}
-        }
-        function cloudSetAuth(token, user, remember, role) {
+        function cloudSetAuth(token, user, remember) {
             try {
                 if (remember) { localStorage.setItem(CLOUD_REMEMBER_KEY, '1'); } else { localStorage.removeItem(CLOUD_REMEMBER_KEY); }
                 const store = remember ? localStorage : sessionStorage;
                 store.setItem(CLOUD_TOKEN_KEY, token || '');
                 store.setItem(CLOUD_USER_KEY, user || '');
-                if (role) store.setItem(CLOUD_ROLE_KEY, role); else store.removeItem(CLOUD_ROLE_KEY);
                 const other = remember ? sessionStorage : localStorage;
                 other.removeItem(CLOUD_TOKEN_KEY);
                 other.removeItem(CLOUD_USER_KEY);
-                other.removeItem(CLOUD_ROLE_KEY);
             } catch (e) {}
         }
         function cloudClearAuth() {
-            try { localStorage.removeItem(CLOUD_TOKEN_KEY); localStorage.removeItem(CLOUD_USER_KEY); localStorage.removeItem(CLOUD_REMEMBER_KEY); localStorage.removeItem(CLOUD_ROLE_KEY); } catch (e) {}
-            try { sessionStorage.removeItem(CLOUD_TOKEN_KEY); sessionStorage.removeItem(CLOUD_USER_KEY); sessionStorage.removeItem(CLOUD_ROLE_KEY); } catch (e) {}
+            try { localStorage.removeItem(CLOUD_TOKEN_KEY); localStorage.removeItem(CLOUD_USER_KEY); localStorage.removeItem(CLOUD_REMEMBER_KEY); } catch (e) {}
+            try { sessionStorage.removeItem(CLOUD_TOKEN_KEY); sessionStorage.removeItem(CLOUD_USER_KEY); } catch (e) {}
         }
 
         function cloudNowText() {
@@ -6046,11 +5952,6 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
         }
 
         async function cloudRequest(path, method, bodyObj) {
-            if (cloudIsDemo && cloudIsDemo()) {
-                const err = new Error('演示模式不访问云端（演示数据为本地随机生成）');
-                err.status = 0;
-                throw err;
-            }
             const token = cloudGetToken();
             const headers = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -6075,7 +5976,6 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
         }
         async function cloudGetData() {
             const json = await cloudRequest('/api/data', 'GET');
-            if (json && json.role) { try { cloudSetRole(json.role); } catch (eRole) {} }
             const d = json && json.hasOwnProperty('data') ? json.data : json;
             return (d && typeof d === 'object' && !Array.isArray(d)) ? d : null;
         }
@@ -6118,55 +6018,16 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             });
         }
 
-        // ---------- 记录级同步辅助（合并冲突/修改时间/内容签名） ----------
-        // 兼容 'YYYY-MM-DD HH:mm:ss'（云端）与 'YYYY/M/D H:mm:ss'（留痕 toLocaleString）两种格式，解析为时间戳比较
-        function cloudParseT(t) {
-            if (!t) return 0;
-            const s = String(t).trim();
-            const m = s.match(/(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
-            if (!m) return 0;
-            return Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
-        }
-        // 行内最新一次人工修改/放行/留痕时间（取各字段最大值；0 表示该行从未被人工改过）
-        function cloudRowTime(o) {
-            let best = 0;
-            const upd = function (t) { const n = cloudParseT(t); if (n > best) best = n; };
-            if (!o || typeof o !== 'object') return best;
-            upd(o.editedAt); upd(o.updatedAt); upd(o.releasedAt); upd(o.manualEditedAt);
-            if (o.audit) { upd(o.audit.releasedAt); upd(o.audit.editedAt); upd(o.audit.updatedAt); upd(o.audit.at); }
-            (o.suikaHistory || []).forEach(function (h) { upd(h.at); });
-            (o.likeHistory || []).forEach(function (h) { upd(h.at); });
-            if (Array.isArray(o.requests)) o.requests.forEach(function (r) { const n = cloudRowTime(r); if (n > best) best = n; });
-            return best;
-        }
-        // 内容签名：排除两端各自重匹配产生的动态字段，只比“客服实际工作内容”
-        function cloudRowSigOf(o) {
-            try {
-                const clean = {};
-                Object.keys(o || {}).forEach(function (k) {
-                    if (k === 'user' || k === 'userMatch' || k === 'updatedAt' || k === 'matched' || k === 'ambiguous' || k === 'missingInfo' || k === 'accounts' || k === 'wechat' || k === 'matchedKey' || k === 'gift') return;
-                    clean[k] = o[k];
-                });
-                return JSON.stringify(clean);
-            } catch (e) { return ''; }
-        }
-        // 同一条记录两端都改过：按修改时间较晚者保留；无法区分时云端优先（并入覆盖语义）
-        function cloudPickNewerRow(localRow, cloudRow) {
-            const lt = cloudRowTime(localRow);
-            const ct = cloudRowTime(cloudRow);
-            if (lt > ct) return { row: localRow, from: 'local' };
-            return { row: cloudRow, from: 'cloud' };
-        }
-
         function cloudCollectSnapshot() {
-            // v2：只同步记录小表（碎卡审核提交 / 集赞礼兑明细），6.8万行主订单本地导入不上云
+            const has = function (v) { return typeof v !== 'undefined' && v !== null && v !== false; };
             return {
-                schema: 'gacha-order-analysis/v2',
+                schema: 'gacha-order-analysis/v1',
                 updatedAt: cloudNowText(),
                 updatedBy: cloudGetUser() || 'unknown',
+                main: { rawOrders: (typeof rawOrdersData !== 'undefined' && Array.isArray(rawOrdersData)) ? rawOrdersData : [] },
                 suika: {
-                    submissions: cloudSanitizeSubmissions(typeof suikaSubmissions !== 'undefined' ? suikaSubmissions : []),
-                    rawCache: (typeof suikaRawDataCache !== 'undefined') ? suikaRawDataCache : null
+                    submissions: cloudSanitizeSubmissions(typeof suikaSubmissions !== 'undefined' ? suikaSubmissions : null),
+                    rawCache: has(suikaRawDataCache) ? suikaRawDataCache : null
                 },
                 jizan: { exportData: (typeof jizanExportData !== 'undefined' && Array.isArray(jizanExportData)) ? jizanExportData : [] },
                 like: { rows: (typeof likeExchangeData !== 'undefined' && Array.isArray(likeExchangeData)) ? likeExchangeData : [] }
@@ -6175,7 +6036,7 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
 
         function cloudHasAnyData() {
             try {
-                // 仅记录小表：6.8万行主订单本地导入不上云，也不作为“可保存”依据（避免误传空记录清空云端）
+                if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) return true;
                 if (typeof suikaSubmissions !== 'undefined' && suikaSubmissions && suikaSubmissions.length) return true;
                 if (typeof jizanExportData !== 'undefined' && jizanExportData && jizanExportData.length) return true;
                 if (typeof likeExchangeData !== 'undefined' && likeExchangeData && likeExchangeData.length) return true;
@@ -6196,40 +6057,15 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             cloudSavingBusy = true;
             cloudStatusPill('保存中…');
             try {
-                // 保存前先拉取云端：把云端最新记录合并进本地后再整份写回，杜绝“后保存方覆盖先保存方”导致他人处理丢失
-                // 云端读取失败时中止本次保存（不覆盖），提示稍后重试
-                let mergeInfo = '';
-                try {
-                    const remote = await cloudGetData();
-                    if (remote && typeof remote === 'object' && remote.schema) {
-                        const ret = await cloudApplySnapshot(remote);
-                        if (ret && !ret.empty && ret.stats) {
-                            const st = ret.stats;
-                            const n = (st.suikaAdd || 0) + (st.jizanAdd || 0) + (st.likeAdd || 0);
-                            const u = (st.suikaUpd || 0) + (st.jizanUpd || 0) + (st.likeUpd || 0);
-                            if (n + u > 0) mergeInfo = '（已并入云端他人记录 新增' + n + '/更新' + u + '）';
-                        }
-                    }
-                } catch (eMerge) {
-                    if (eMerge && eMerge.status === 401) throw eMerge;
-                    cloudStatusPill('保存中止：云端读取失败，为避免覆盖他人数据本次不保存', '#ffd6d6');
-                    cloudLogPush('保存中止：云端读取失败，为避免覆盖他人数据本次不保存', 'err');
-                    cloudToast('云端读取失败，本次已取消保存（不会覆盖云端）。请检查网络后重试。', true);
-                    return;
-                }
                 const snap = cloudCollectSnapshot();
                 await cloudPutData(snap);
-                cloudStatusPill('已同步 ' + snap.updatedAt + mergeInfo);
-                cloudSetSource(cloudGetUser(), snap.updatedAt);
-                cloudLogPush('已保存到云端（更新于 ' + snap.updatedAt + mergeInfo + '）', 'ok');
+                cloudStatusPill('已同步 ' + snap.updatedAt);
             } catch (e) {
                 if (e && e.status === 401) {
                     cloudStatusPill('登录过期，请重新登录', '#ffd6d6');
-                    cloudLogPush('云端保存失败：登录已过期，请重新登录', 'err');
                     cloudShowLogin('登录已过期，请重新登录后继续同步');
                 } else {
                     cloudStatusPill('保存失败（网络/服务异常）', '#ffd6d6');
-                    cloudLogPush('云端保存失败（网络/服务异常），本地数据未丢失', 'err');
                     cloudToast('云端保存失败：' + (e && e.message ? e.message : '网络异常') + '。本地数据仍在，可稍后点「保存到云端」重试。', true);
                 }
             } finally {
@@ -6237,71 +6073,54 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             }
         }
 
-        // ---------- 合并云端记录 -> 本地（云端并入本地：只增改、不删除；冲突按修改时间较晚者保留） ----------
+        // ---------- 载入云端快照 -> 内存/渲染 ----------
         async function cloudApplySnapshot(snap) {
             if (!snap || typeof snap !== 'object') return { ok: true, empty: true };
+            const mainRows = snap.main && Array.isArray(snap.main.rawOrders) ? snap.main.rawOrders : [];
             const suikaList = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions : [];
             const jizanList = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData : [];
             const likeList = snap.like && Array.isArray(snap.like.rows) ? snap.like.rows : [];
-            const v1Main = snap.main && Array.isArray(snap.main.rawOrders) && snap.main.rawOrders.length ? snap.main.rawOrders : [];
-            if (!v1Main.length && !suikaList.length && !jizanList.length && !likeList.length) return { ok: true, empty: true };
+            if (!mainRows.length && !suikaList.length && !jizanList.length && !likeList.length) return { ok: true, empty: true };
 
-            const stats = { suikaAdd: 0, suikaUpd: 0, suikaConflict: 0, jizanAdd: 0, jizanUpd: 0, jizanConflict: 0, likeAdd: 0, likeUpd: 0, likeConflict: 0 };
-
-            // 兼容 v1 老快照：本地未导主订单时才导入，已导订单绝不覆盖（订单大表本地为准）
-            if (v1Main.length && (!(typeof rawOrdersData !== 'undefined') || !rawOrdersData || !rawOrdersData.length)) {
-                try {
-                    rawOrdersData = v1Main;
-                    const ls = document.getElementById('loadingSection');
-                    if (ls) ls.classList.remove('hidden');
-                    await processData(rawOrdersData);
-                    renderRawData(rawOrdersData);
-                    renderCharts();
-                    cardStatsPage = 1;
-                    renderStatsTables();
-                    filteredData = [...userData];
-                    renderTable(1);
-                    const ls2 = document.getElementById('loadingSection');
-                    if (ls2) ls2.classList.add('hidden');
-                    const rs = document.getElementById('resultSection');
-                    if (rs) rs.classList.remove('hidden');
-                    setTimeout(() => { try { Object.values(charts).forEach(c => c.resize()); } catch (e2) {} }, 100);
-                } catch (e1) {}
+            // 1) 主订单：重建 userData/cardStats/图表表格
+            if (mainRows.length) {
+                rawOrdersData = mainRows;
+                const ls = document.getElementById('loadingSection');
+                if (ls) ls.classList.remove('hidden');
+                await processData(rawOrdersData);
+                renderRawData(rawOrdersData);
+                renderCharts();
+                cardStatsPage = 1;
+                renderStatsTables();
+                filteredData = [...userData];
+                renderTable(1);
+                const ls2 = document.getElementById('loadingSection');
+                if (ls2) ls2.classList.add('hidden');
+                const rs = document.getElementById('resultSection');
+                if (rs) rs.classList.remove('hidden');
+                setTimeout(() => { try { Object.values(charts).forEach(c => c.resize()); } catch (e2) {} }, 100);
             }
-
-            // 1) 碎卡审核提交记录合并：同一条 = 提交编号 code（行内含 audit/人工放行/修改历史，随行同步）
+            // 2) 碎卡审核：还原提交+审核终态，user/userMatch 按当前主数据重匹配
             if (suikaList.length) {
-                if (!Array.isArray(suikaSubmissions)) suikaSubmissions = [];
-                const idxLocal = {};
-                suikaSubmissions.forEach(function (s) { if (s && String(s.code || '') !== '') idxLocal[String(s.code)] = s; });
-                const merged = suikaSubmissions.slice();
-                suikaList.forEach(function (cs) {
-                    if (!cs || typeof cs !== 'object') return;
-                    const code = String(cs.code || '');
-                    const lr = code ? idxLocal[code] : null;
-                    if (!lr) { merged.push(cs); stats.suikaAdd++; return; }
-                    if (cloudRowSigOf(lr) === cloudRowSigOf(cs)) return;
-                    const lt = cloudRowTime(lr), ct = cloudRowTime(cs);
-                    if (lt && ct && lt !== ct) stats.suikaConflict++;
-                    const pick = cloudPickNewerRow(lr, cs);
-                    const pos = merged.indexOf(lr);
-                    if (pos >= 0) merged[pos] = pick.row; else merged.push(pick.row);
-                    stats.suikaUpd++;
-                });
-                suikaSubmissions = merged;
-                // 原始提交表缓存：仅本地为空时采纳云端，避免旧批次覆盖新导入批次
-                if (snap.suika && snap.suika.rawCache && !(suikaRawDataCache && suikaRawDataCache.length)) suikaRawDataCache = snap.suika.rawCache;
-                // 按当前主订单重匹配 + 重建索引 + 渲染（主数据缺失时 user 置空，不影响审核结果展示）
-                suikaSubmissions.forEach(function (s) {
+                suikaSubmissions = suikaList.map(function (s) {
+                    const c = Object.assign({}, s);
                     if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) {
                         try {
                             const mergeOn = document.getElementById('suikaMergePhoneCb') ? document.getElementById('suikaMergePhoneCb').checked : false;
-                            const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name, mergeOn ? { mergeByPhone: true } : {});
-                            s.user = matched.user; s.userMatch = matched;
-                        } catch (e3) { s.user = null; s.userMatch = null; }
-                    } else { s.user = null; s.userMatch = null; }
+                            const matched = findUserByPhoneOrderDetail(c.phone, c.orderNo, c.nickname, c.name, mergeOn ? { mergeByPhone: true } : {});
+                            c.user = matched.user;
+                            c.userMatch = matched;
+                        } catch (e3) { c.user = null; c.userMatch = null; }
+                    } else {
+                        c.user = null;
+                        c.userMatch = null;
+                    }
+                    return c;
                 });
-                try { if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) userCardCountsMap = buildUserCardCounts(rawOrdersData); } catch (e4) {}
+                try {
+                    if (typeof rawOrdersData !== 'undefined' && rawOrdersData && rawOrdersData.length) userCardCountsMap = buildUserCardCounts(rawOrdersData);
+                } catch (e4) {}
+                if (snap.suika.hasOwnProperty('rawCache')) suikaRawDataCache = snap.suika.rawCache;
                 suikaAuditMap = {};
                 suikaSubmissions.forEach(function (s) {
                     if (s.user) {
@@ -6313,28 +6132,9 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 const ssr = document.getElementById('suikaResultSection');
                 if (ssr) ssr.classList.remove('hidden');
             }
-
-            // 2) 集赞礼兑明细合并：同一条 = 来源Sheet+手机号+订单号+卡面（行内含 manualStatus/人工修改历史，随行同步）
+            // 3) 集赞：还原明细并回填宣传礼到 userData
             if (jizanList.length) {
-                if (!Array.isArray(jizanExportData)) jizanExportData = [];
-                const jk = function (e) { return (e.sheet || '') + '|' + String(e.phone || '').trim() + '|' + String(e.orderNo || '').trim() + '|' + String(e.card || '').trim(); };
-                const idxLocalMap = {};
-                jizanExportData.forEach(function (e, i) { if (e) { const k = jk(e); if (!(k in idxLocalMap)) idxLocalMap[k] = i; } });
-                const merged = jizanExportData.slice();
-                jizanList.forEach(function (ce) {
-                    if (!ce || typeof ce !== 'object') return;
-                    const k = jk(ce);
-                    const li = (k in idxLocalMap) ? idxLocalMap[k] : -1;
-                    if (li < 0) { merged.push(ce); stats.jizanAdd++; return; }
-                    const lr = merged[li];
-                    if (cloudRowSigOf(lr) === cloudRowSigOf(ce)) return;
-                    const lt = cloudRowTime(lr), ct = cloudRowTime(ce);
-                    if (lt && ct && lt !== ct) stats.jizanConflict++;
-                    const pick = cloudPickNewerRow(lr, ce);
-                    merged[li] = pick.row;
-                    stats.jizanUpd++;
-                });
-                jizanExportData = merged;
+                jizanExportData = jizanList;
                 try { if (typeof replayJizanGiftToUsers === 'function') replayJizanGiftToUsers(); } catch (e5) {}
                 try {
                     if (typeof renderJizanSummary === 'function' && typeof buildJizanSummaryFromExport === 'function') renderJizanSummary(buildJizanSummaryFromExport(), true);
@@ -6342,98 +6142,15 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 const jsr = document.getElementById('jizanResultSection');
                 if (jsr) jsr.classList.remove('hidden');
             }
-            // 3) 超like兑换卡面记录合并：同一条 = CCL订单号（行内含 manualStatus/人工修改历史，随行同步）
+            // 4) 超like兑换：还原明细并回填用户列
             if (likeList.length) {
-                if (!Array.isArray(likeExchangeData)) likeExchangeData = [];
-                const lk = function (e) { return String(e.orderNo || '').trim(); };
-                const idxLike = {};
-                likeExchangeData.forEach(function (e, i) { if (e) { const k = lk(e); if (k && !(k in idxLike)) idxLike[k] = i; } });
-                const mergedLike = likeExchangeData.slice();
-                likeList.forEach(function (ce) {
-                    if (!ce || typeof ce !== 'object') return;
-                    const k = lk(ce);
-                    if (!k) return;
-                    const li = (k in idxLike) ? idxLike[k] : -1;
-                    if (li < 0) { mergedLike.push(ce); stats.likeAdd++; return; }
-                    const lr = mergedLike[li];
-                    if (cloudRowSigOf(lr) === cloudRowSigOf(ce)) return;
-                    const lt = cloudRowTime(lr), ct = cloudRowTime(ce);
-                    if (lt && ct && lt !== ct) stats.likeConflict++;
-                    const pick = cloudPickNewerRow(lr, ce);
-                    mergedLike[li] = pick.row;
-                    stats.likeUpd++;
-                });
-                likeExchangeData = mergedLike;
-                try { replayLikeExchangeToUsers(); } catch (e7) {}
-                try { renderLikeResultAll(); } catch (e8) {}
+                likeExchangeData = likeList;
+                try { if (typeof replayLikeExchangeToUsers === 'function') replayLikeExchangeToUsers(); } catch (e7) {}
+                try { if (typeof renderLikeResultAll === 'function') renderLikeResultAll(); } catch (e8) {}
                 const lrs = document.getElementById('likeResultSection');
                 if (lrs) lrs.classList.remove('hidden');
             }
-            return { ok: true, empty: false, stats: stats, time: snap.updatedAt || '', by: snap.updatedBy || '' };
-        }
-
-        // ---------- 重传基础表时保留本地人工成果（防覆盖洗白） ----------
-        // 碎卡：旧列表与新列表按 code 对齐，把“人工修改/放行”产生的字段贴回新行；自动审核字段不贴（新表按当前口径重审）
-        function suikaPreserveManual(oldList, newBase) {
-            if (!Array.isArray(oldList) || !Array.isArray(newBase)) return;
-            const byCode = {};
-            newBase.forEach(function (ns) { if (ns && String(ns.code || '') !== '') byCode[String(ns.code)] = ns; });
-            const copyField = function (src, dst, key) {
-                if (src && dst && src[key] !== undefined && src[key] !== null) {
-                    try { dst[key] = Array.isArray(src[key]) ? src[key].slice() : src[key]; } catch (e) {}
-                }
-            };
-            oldList.forEach(function (os) {
-                if (!os || os.code === undefined || os.code === null) return;
-                const ns = byCode[String(os.code)];
-                if (!ns) return;
-                // 行级：修改历史 + 人工编辑痕迹（含旧单条字段兜底）
-                ['suikaHistory', 'manuallyEdited', 'editedNote', 'editedAt', 'editedContent'].forEach(function (k) { copyField(os, ns, k); });
-                // 请求级：历史数组 + 人工放行 audit（整份保留放行结果，避免重导后需人工处理项回到放行前）
-                if (Array.isArray(os.requests) && Array.isArray(ns.requests)) {
-                    const n = Math.min(os.requests.length, ns.requests.length);
-                    for (let i = 0; i < n; i++) {
-                        const or = os.requests[i], nr = ns.requests[i];
-                        if (!or || !nr) continue;
-                        copyField(or, nr, 'suikaHistory');
-                        copyField(or, nr, 'manuallyEdited');
-                        copyField(or, nr, 'editedNote');
-                        copyField(or, nr, 'editedAt');
-                        copyField(or, nr, 'editedContent');
-                        if (or.audit && or.audit.manuallyReleased) nr.audit = JSON.parse(JSON.stringify(or.audit));
-                    }
-                    // 请求全部人工放行过的新行，组级状态同步为通过（与批量放行 3891 口径一致）
-                    if (ns.requests.length > 0 && ns.requests.every(function (r) { return r.audit && r.audit.pass && r.audit.manuallyReleased; })) {
-                        ns.audit = { pass: true, status: '通过' };
-                    }
-                }
-            });
-        }
-        // 集赞：按 来源Sheet+手机号+订单号+卡面 对齐，贴回人工状态/修改历史/人工指定归属
-        function jizanPreserveManual(oldList, newBase) {
-            if (!Array.isArray(oldList) || !Array.isArray(newBase)) return;
-            const jk = function (e) { return (e.sheet || '') + '|' + String(e.phone || '').trim() + '|' + String(e.orderNo || '').trim() + '|' + String(e.card || '').trim(); };
-            const byKey = {};
-            newBase.forEach(function (ne) { if (ne) { const k = jk(ne); if (!(k in byKey)) byKey[k] = ne; } });
-            const copyField = function (src, dst, key) {
-                if (src && dst && src[key] !== undefined && src[key] !== null) {
-                    try { dst[key] = Array.isArray(src[key]) ? src[key].slice() : src[key]; } catch (e) {}
-                }
-            };
-            oldList.forEach(function (oe) {
-                if (!oe) return;
-                const ne = byKey[jk(oe)];
-                if (!ne) return;
-                ['jizanHistory', 'manualStatus', 'manuallyEdited', 'editedNote', 'editedAt', 'editedContent'].forEach(function (k) { copyField(oe, ne, k); });
-                // 客服人工指定过归属账号的保留归属，避免重导打回“未匹配/待确认”（仅限显式人工编辑过的行）
-                if (oe.manuallyEdited && oe.wechat) {
-                    ne.wechat = oe.wechat;
-                    ne.matched = true;
-                    if (oe.matchedKey === '客服人工指定') ne.matchedKey = '客服人工指定';
-                    ne.ambiguous = false;
-                    ne.accounts = [];
-                }
-            });
+            return { ok: true, empty: false, time: snap.updatedAt || '', by: snap.updatedBy || '' };
         }
 
         async function cloudLoadFromServer(silent) {
@@ -6443,33 +6160,20 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 const snap = await cloudGetData();
                 if (!snap || typeof snap !== 'object' || !snap.schema) {
                     cloudStatusPill('云端暂无已保存数据');
-                    cloudLogPush('云端暂无已保存数据');
-                    if (!silent) cloudToast('云端暂无数据。请上传 Excel 分析并在确认无误后点「保存到云端」写入。');
+                    if (!silent) cloudToast('云端暂无数据。可先上传 Excel 分析，系统会自动保存到云端。');
                     return;
                 }
-                const ret = await cloudApplySnapshot(snap);
-                if (ret.empty) { cloudStatusPill('云端暂无已保存数据'); cloudLogPush('云端暂无已保存数据'); return; }
-                const st = ret.stats || {};
-                const totalNew = (st.suikaAdd || 0) + (st.jizanAdd || 0) + (st.likeAdd || 0);
-                const totalUpd = (st.suikaUpd || 0) + (st.jizanUpd || 0) + (st.likeUpd || 0);
-                const totalCf = (st.suikaConflict || 0) + (st.jizanConflict || 0) + (st.likeConflict || 0);
-                cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）');
-                cloudSetSource(ret.by || '', ret.time || '');
-                cloudLogPush('拉取合并云端记录：来源账号 ' + (ret.by || '-') + '（更新于 ' + (ret.time || '-') + '），新增 ' + totalNew + '/更新 ' + totalUpd + ' 条', 'ok');
                 if (!silent) {
-                    alert('云端记录已合并到当前页面（更新于 ' + (ret.time || '-') + '，账号 ' + (ret.by || '-') + '）：\n' +
-                        '· 碎卡审核：新增 ' + (st.suikaAdd || 0) + ' 条、更新 ' + (st.suikaUpd || 0) + ' 条\n' +
-                        '· 集赞礼兑：新增 ' + (st.jizanAdd || 0) + ' 条、更新 ' + (st.jizanUpd || 0) + ' 条\n' +
-                        '· 超like兑换：新增 ' + (st.likeAdd || 0) + ' 条、更新 ' + (st.likeUpd || 0) + ' 条\n' +
-                        (totalCf ? '· 两端都修改过、已按较新者保留 ' + totalCf + ' 条\n' : '') +
-                        '只增改不删除，本地未被云端覆盖的记录均保留。');
-                } else if (totalNew + totalUpd > 0) {
-                    cloudToast('云端记录已合并：新增 ' + totalNew + ' 条、更新 ' + totalUpd + ' 条');
+                    const okGo = window.confirm('将从云端载入数据（更新于 ' + (snap.updatedAt || '-') + '，账号 ' + (snap.updatedBy || '-') + '）。\n载入会用云端数据覆盖当前页面内存数据。是否继续？');
+                    if (!okGo) return;
                 }
+                const ret = await cloudApplySnapshot(snap);
+                if (ret.empty) { cloudStatusPill('云端暂无已保存数据'); return; }
+                cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
+                if (!silent) alert('云端数据已载入' + (ret.time ? '（更新于 ' + ret.time + '）' : '') + '：主订单、碎卡审核、集赞导入均已恢复。');
             } catch (e) {
-                if (e && e.status === 401) { cloudStatusPill('登录过期，请重新登录', '#ffd6d6'); cloudLogPush('云端拉取失败：登录已过期', 'err'); cloudShowLogin('登录已过期，请重新登录'); return; }
+                if (e && e.status === 401) { cloudStatusPill('登录过期，请重新登录', '#ffd6d6'); cloudShowLogin('登录已过期，请重新登录'); return; }
                 cloudStatusPill('拉取失败（网络/服务异常）', '#ffd6d6');
-                cloudLogPush('云端拉取失败（网络/服务异常）', 'err');
                 if (!silent) cloudToast('云端数据拉取失败：' + (e && e.message ? e.message : '网络异常'), true);
             }
         }
@@ -6509,12 +6213,8 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 '<input type="checkbox" id="cloudLoginRemember" style="width:15px;height:15px;margin:0 7px 0 0;accent-color:#20517d;cursor:pointer;">' +
                 '<label for="cloudLoginRemember" style="cursor:pointer;">记住我（下次打开自动登录）</label>' +
                 '</div>' +
-                '<button id="cloudLoginBtn" style="width:100%;padding:11px 0;border:none;border-radius:10px;background:linear-gradient(135deg,#20517d 0%,#3b82f6 55%,#fbbf24 100%);color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">登 录</button>' +
-                '<div style="display:flex;align-items:center;gap:8px;margin:14px 0 2px;"><div style="flex:1;height:1px;background:#e5e7eb;"></div><span style="font-size:12px;color:#9aa5b1;">或</span><div style="flex:1;height:1px;background:#e5e7eb;"></div></div>' +
-                '<button id="cloudDemoBtn" title="无需登录，使用程序生成的随机演示数据浏览完整功能（不访问云端）" style="width:100%;padding:11px 0;border:1px solid #99f6e4;border-radius:10px;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">✨ 体验演示模式（无需登录）</button>' +
-                '<div style="font-size:12px;font-weight:bold;color:#b45309;margin-top:12px;text-align:center;">演示数据全部为随机生成，非真实数据</div>' +
-                '<div style="font-size:11px;color:#94a3b8;margin-top:6px;text-align:center;line-height:1.7;">演示模式使用程序生成的随机数据，仅作功能展示，<br>不涉及真实用户信息，也不会访问云端。</div>' +
-                '<div style="font-size:11px;color:#aaa;margin-top:8px;text-align:center;">未勾选「记住我」时，关闭浏览器后需重新登录</div>' +
+                '<button id="cloudLoginBtn" style="width:100%;padding:11px 0;border:none;border-radius:10px;background:linear-gradient(135deg,#20517d,#3b82f6);color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">登 录</button>' +
+                '<div style="font-size:11px;color:#aaa;margin-top:12px;text-align:center;">未勾选「记住我」时，关闭浏览器后需重新登录</div>' +
                 '</div>';
             document.body.appendChild(ov);
             cloudLoginOverlay = ov;
@@ -6531,10 +6231,9 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 btn.textContent = '登录中…';
                 try {
                     const json = await cloudLogin(u, p);
-                    cloudSetAuth(json.token, json.username || u, !!(rememberBox && rememberBox.checked), json.role);
+                    cloudSetAuth(json.token, json.username || u, !!(rememberBox && rememberBox.checked));
                     cloudHideLogin();
                     cloudRefreshUserBadge();
-                    cloudRebuildTopBar();
                     cloudStatusPill('登录成功，检查云端数据…');
                     cloudToast('登录成功（' + (json.username || u) + '）');
                     try { await cloudAutoProbe(); } catch (e2) {}
@@ -6547,18 +6246,6 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                 }
             }
             btn.addEventListener('click', doLogin);
-            const demoBtn = document.getElementById('cloudDemoBtn');
-            if (demoBtn) {
-                demoBtn.addEventListener('click', async function () {
-                    cloudHideLogin();
-                    try {
-                        await cloudEnterDemo();
-                    } catch (err) {
-                        console.error('演示模式加载失败', err);
-                        cloudShowLogin('演示模式加载失败：' + ((err && err.message) ? err.message : '未知错误'));
-                    }
-                });
-            }
             pass.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doLogin(); });
             document.body.style.overflow = 'hidden';
             setTimeout(() => { try { pass.focus(); } catch (e) {} }, 100);
@@ -6572,895 +6259,85 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
             cloudClearAuth();
             cloudRefreshUserBadge();
             cloudStatusPill('未登录');
-            cloudRebuildTopBar();
             cloudShowLogin('已退出登录。重新登录后将检查云端数据');
         }
 
         // 登录成功/页面初始化后：探测云端是否有数据，自动载入（页面无本地数据时）
-        // 云合并多阶段弹窗：onCreated 里通过 setTitle/setBody/setButtons/done 控制弹窗内容
-        function cloudMergeDialog(opts) {
-            return new Promise(function (resolve) {
-                const old = document.getElementById('cloudMergeOverlay');
-                if (old && old.parentNode) old.parentNode.removeChild(old);
-                const ov = document.createElement('div');
-                ov.id = 'cloudMergeOverlay';
-                ov.style.cssText = 'position:fixed;inset:0;z-index:11500;display:flex;align-items:center;justify-content:center;background:rgba(15,30,48,0.74);backdrop-filter:blur(2px);';
-                const box = document.createElement('div');
-                box.style.cssText = 'background:#fff;border-radius:16px;padding:26px 30px;width:450px;max-width:92vw;box-shadow:0 18px 60px rgba(0,0,0,0.35);font-family:-apple-system,\'Segoe UI\',Roboto,sans-serif;';
-                box.innerHTML = '<div id="cloudMergeTitle" style="font-size:18px;font-weight:bold;color:#20517d;margin-bottom:12px;"></div>' +
-                    '<div id="cloudMergeBody" style="font-size:13px;color:#444;line-height:1.8;max-height:52vh;overflow:auto;white-space:pre-wrap;"></div>' +
-                    '<div id="cloudMergeBtns" style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap;"></div>';
-                ov.appendChild(box);
-                document.body.appendChild(ov);
-                const T = document.getElementById('cloudMergeTitle');
-                const B = document.getElementById('cloudMergeBody');
-                const W = document.getElementById('cloudMergeBtns');
-                const api = {
-                    setTitle: function (t) { T.textContent = t; },
-                    setBody: function (h) { B.innerHTML = h; },
-                    setButtons: function (list) {
-                        W.innerHTML = '';
-                        list.forEach(function (b) {
-                            const btn = document.createElement('button');
-                            btn.textContent = b.label;
-                            btn.style.cssText = 'padding:9px 18px;border:none;border-radius:9px;cursor:pointer;font-size:14px;font-weight:bold;background:' + (b.primary ? 'linear-gradient(135deg,#20517d,#3b82f6);color:#fff' : '#e2e8f0;color:#334155') + ';';
-                            if (b.disabled) { btn.disabled = true; btn.style.opacity = '0.6'; }
-                            btn.addEventListener('click', function () { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve(b.value); });
-                            W.appendChild(btn);
-                        });
-                    },
-                    done: function (val) { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve(val); }
-                };
-                if (opts.onCreated) opts.onCreated(api);
-            });
-        }
-
-        // 登录后自动探测云端：有记录则弹窗询问合并（可跳过），合并分阶段展示进度与摘要
         async function cloudAutoProbe() {
             if (!cloudGetToken()) return;
             try {
                 const snap = await cloudGetData();
                 if (!snap || typeof snap !== 'object' || !snap.schema) {
                     cloudStatusPill('云端暂无已保存数据');
-                    cloudLogPush('云端暂无已保存数据');
                     return;
                 }
-                const suikaCount = snap.suika && Array.isArray(snap.suika.submissions) ? snap.suika.submissions.length : 0;
-                const jizanCount = snap.jizan && Array.isArray(snap.jizan.exportData) ? snap.jizan.exportData.length : 0;
-                const likeCount = snap.like && Array.isArray(snap.like.rows) ? snap.like.rows.length : 0;
-                if (!suikaCount && !jizanCount && !likeCount) { cloudStatusPill('云端暂无记录数据'); cloudLogPush('云端暂无记录数据'); return; }
-                // 阶段1：概要询问（可跳过）
-                const want = await cloudMergeDialog({ onCreated: function (c) {
-                    c.setTitle('云端发现上一班记录，是否合并？');
-                    c.setBody('来源账号：' + (snap.updatedBy || '-') + '\n保存时间：' + (snap.updatedAt || '-' ) + '\n云端记录：碎卡审核 ' + suikaCount + ' 条、集赞礼兑 ' + jizanCount + ' 条、超like兑换 ' + likeCount + ' 条\n\n合并规则：只增改、不删除本地记录；同一条记录两端都改过时，保留修改时间较晚的一方。\n\n可跳过：本地已有较新数据或想稍后再合并，可点「暂不合并」，之后在右上角手动拉取。');
-                    c.setButtons([{ label: '暂不合并', value: 'skip' }, { label: '开始合并', value: 'go', primary: true }]);
-                } });
-                if (want !== 'go') { cloudStatusPill('已跳过云端记录合并（可点右上角手动拉取）'); cloudLogPush('已跳过云端记录合并（可稍后手动拉取）'); return; }
-                // 阶段2：合并中（分阶段文字进度）
-                cloudMergeDialog({ onCreated: function (c) {
-                    c.setTitle('正在合并云端记录…');
-                    c.setBody('⏳ 正在比对碎卡审核记录…\n⏳ 正在比对集赞礼兑记录…\n⏳ 正在刷新页面统计…');
-                    c.setButtons([]);
-                    setTimeout(async function () {
-                        try {
-                            const ret = await cloudApplySnapshot(snap);
-                            const st = ret.stats || {};
-                            const sum = (st.suikaAdd || 0) + (st.suikaUpd || 0) + (st.jizanAdd || 0) + (st.jizanUpd || 0) + (st.likeAdd || 0) + (st.likeUpd || 0);
-                            c.setTitle('合并完成');
-                            c.setBody('碎卡审核：新增 ' + (st.suikaAdd || 0) + ' 条、更新 ' + (st.suikaUpd || 0) + ' 条\n' +
-                                '集赞礼兑：新增 ' + (st.jizanAdd || 0) + ' 条、更新 ' + (st.jizanUpd || 0) + ' 条\n' +
-                                '超like兑换：新增 ' + (st.likeAdd || 0) + ' 条、更新 ' + (st.likeUpd || 0) + ' 条\n' +
-                                (((st.suikaConflict || 0) + (st.jizanConflict || 0) + (st.likeConflict || 0)) ? '两端都改过、已按较新者保留 ' + ((st.suikaConflict || 0) + (st.jizanConflict || 0) + (st.likeConflict || 0)) + ' 条\n' : '') +
-                                '\n' + (sum > 0 ? '本地记录只增改、未删除任何数据。\n本班可继续导入新数据或直接导出。' : '本地记录已是最新，无需变化。'));
-                            c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
-                            if (sum === 0) { cloudStatusPill('云端记录与本地一致'); cloudLogPush('云端记录与本地一致，无需合并', 'ok'); }
-                            else { cloudStatusPill('已合并云端记录（更新于 ' + (ret.time || '-') + '）'); cloudSetSource(ret.by || snap.updatedBy || '', ret.time || snap.updatedAt || ''); cloudLogPush('已合并云端记录：来源账号 ' + (ret.by || snap.updatedBy || '-') + '（更新于 ' + (ret.time || '-') + '）', 'ok'); }
-                        } catch (err) {
-                            c.setTitle('合并失败');
-                            c.setBody('合并过程中发生错误：' + (err && err.message ? err.message : '未知错误') + '\n本地数据未受影响。');
-                            cloudLogPush('云端合并失败：' + (err && err.message ? err.message : '未知错误'), 'err');
-                            c.setButtons([{ label: '知道了', value: 'ok', primary: true }]);
-                        }
-                    }, 40);
-                } });
+                if (cloudHasAnyData()) {
+                    cloudStatusPill('检测到云端数据（更新于 ' + (snap.updatedAt || '-') + '）');
+                    cloudToast('云端已有数据，可点右上角「从云端载入」核对后载入。');
+                    return;
+                }
+                const okAuto = window.confirm('检测到云端已有数据（更新于 ' + (snap.updatedAt || '-') + '，账号 ' + (snap.updatedBy || '-') + '）。\n是否立即载入？');
+                if (!okAuto) { cloudStatusPill('云端有数据，未自动载入'); return; }
+                const ret = await cloudApplySnapshot(snap);
+                if (!ret.empty) {
+                    cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
+                    alert('云端数据已载入：主订单、碎卡审核、集赞导入均已恢复，可直接查看与导出。');
+                }
             } catch (e) {
                 if (e && e.status === 401) { cloudClearAuth(); cloudRefreshUserBadge(); cloudStatusPill('登录过期'); cloudShowLogin('登录已过期，请重新登录'); return; }
                 cloudStatusPill('云端不可用（网络异常），可本地使用', '#ffd6d6');
             }
         }
 
-        // ---------- 右下角悬浮窗（当前登录 / 数据来源 + 操作记录，可展开收起） ----------
+        // ---------- 顶栏/状态 UI ----------
         var cloudCloudStatusEl = null;
         var cloudPillUserEl = null;
         var cloudPillStatusEl = null;
-        var cloudPillSourceEl = null;
-        var cloudPillToggleEl = null;
-        var cloudLogWrapEl = null;
-        var cloudLogListEl = null;
-        var cloudLogs = [];
-        var cloudLogMax = 80;
-        var cloudFloatExpanded = true;
-        var cloudLastSource = null;
 
-        var cloudLastBadgeUser = null;
         function cloudRefreshUserBadge() {
-            if (cloudPillUserEl) cloudPillUserEl.textContent = '当前登录 ' + (cloudGetUser() ? cloudGetUser() : '未登录');
-            const u = cloudGetUser();
-            if (cloudLastBadgeUser !== u) { cloudLastBadgeUser = u; cloudLogPush(u ? '当前账号：' + u : '未登录'); }
-        }
-        // 记录一条操作日志（悬浮窗内展示；仅本页会话内有效，刷新即清空）
-        function cloudLogPush(text, kind) {
-            if (!text) return;
-            cloudLogs.push({ t: cloudNowText(), text: String(text), kind: kind || 'info' });
-            if (cloudLogs.length > cloudLogMax) cloudLogs.splice(0, cloudLogs.length - cloudLogMax);
-            if (cloudLogListEl) {
-                const d = document.createElement('div');
-                d.style.cssText = 'display:flex;gap:6px;align-items:flex-start;line-height:1.5;padding:1px 0;';
-                const ts = document.createElement('span');
-                ts.textContent = cloudLogs[cloudLogs.length - 1].t.slice(11);
-                ts.style.cssText = 'color:#64748b;flex:none;font-size:11px;';
-                const tx = document.createElement('span');
-                tx.textContent = text;
-                tx.style.cssText = 'flex:1;font-size:12px;color:' + ((kind === 'err') ? '#ffb4b4' : (kind === 'ok' ? '#a7f3d0' : '#cbd5e1')) + ';word-break:break-all;';
-                d.appendChild(ts); d.appendChild(tx);
-                cloudLogListEl.appendChild(d);
-                cloudLogListEl.scrollTop = cloudLogListEl.scrollHeight;
-            }
-        }
-        // 记录当前云端数据来源账号（最近保存者的账号）
-        function cloudSetSource(by, at) {
-            cloudLastSource = (by || at) ? { by: by || '', at: at || '' } : null;
-            if (cloudPillSourceEl) cloudPillSourceEl.textContent = ' 数据来源：' + ((by && by !== '-') ? by : '-') + ((at && at !== '-' && at) ? ' · ' + at : '');
-        }
-        function cloudRenderFloatToggle() {
-            if (!cloudPillToggleEl || !cloudLogWrapEl) return;
-            cloudLogWrapEl.style.display = cloudFloatExpanded ? 'block' : 'none';
-            cloudPillToggleEl.textContent = cloudFloatExpanded ? '收起 ▲' : '展开 ▼';
-        }
-        function cloudToggleFloat() {
-            cloudFloatExpanded = !cloudFloatExpanded;
-            cloudRenderFloatToggle();
+            if (cloudPillUserEl) cloudPillUserEl.textContent = cloudGetUser() ? ('👤 ' + cloudGetUser()) : '未登录';
         }
         function cloudStatusPill(text, warn) {
             if (cloudPillStatusEl) {
                 cloudPillStatusEl.textContent = '｜' + (text || '');
-                cloudPillStatusEl.style.color = warn ? '#ffd6d6' : '#a7f3d0';
+                cloudPillStatusEl.style.color = warn ? '#ffd6d6' : '#d9f7e6';
                 return;
             }
             if (cloudCloudStatusEl) cloudCloudStatusEl.textContent = text || '';
         }
         function cloudInjectUI() {
-            // 右下角悬浮窗：头部=当前登录｜数据来源｜同步状态（点击展开/收起），下方为本页操作记录
+            // 底部状态胶囊（账号｜同步状态）
             const pill = document.createElement('div');
-            pill.style.cssText = 'position:fixed;right:14px;bottom:12px;z-index:9001;background:#1e293b;color:#fff;font-size:12px;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,0.28);max-width:min(440px, 86vw);min-width:270px;';
-            const head = document.createElement('div');
-            head.style.cssText = 'display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer;user-select:none;flex-wrap:wrap;';
-            head.title = '点击展开/收起操作记录';
+            pill.style.cssText = 'position:fixed;right:14px;bottom:12px;z-index:9001;background:#1e293b;color:#fff;font-size:12px;padding:7px 14px;border-radius:20px;box-shadow:0 4px 14px rgba(0,0,0,0.25);display:flex;align-items:center;gap:6px;max-width:64vw;cursor:default;';
             cloudPillUserEl = document.createElement('span');
-            cloudPillUserEl.style.cssText = 'font-weight:bold;color:#fff;white-space:nowrap;';
-            cloudPillSourceEl = document.createElement('span');
-            cloudPillSourceEl.style.cssText = 'color:#94a3b8;white-space:nowrap;';
             cloudPillStatusEl = document.createElement('span');
-            cloudPillStatusEl.style.color = '#a7f3d0';
-            cloudPillToggleEl = document.createElement('span');
-            cloudPillToggleEl.style.cssText = 'color:#94a3b8;font-size:11px;margin-left:auto;white-space:nowrap;';
-            head.appendChild(cloudPillUserEl);
-            head.appendChild(cloudPillSourceEl);
-            head.appendChild(cloudPillStatusEl);
-            head.appendChild(cloudPillToggleEl);
-            head.addEventListener('click', cloudToggleFloat);
-            pill.appendChild(head);
-            cloudLogWrapEl = document.createElement('div');
-            cloudLogWrapEl.style.cssText = 'display:block;border-top:1px solid rgba(255,255,255,0.12);padding:2px 12px 10px;';
-            cloudLogListEl = document.createElement('div');
-            cloudLogListEl.style.cssText = 'max-height:180px;overflow-y:auto;font-size:12px;';
-            cloudLogWrapEl.appendChild(cloudLogListEl);
-            pill.appendChild(cloudLogWrapEl);
+            cloudPillStatusEl.style.color = '#d9f7e6';
+            pill.appendChild(cloudPillUserEl);
+            pill.appendChild(cloudPillStatusEl);
             document.body.appendChild(pill);
             cloudCloudStatusEl = pill;
-            cloudSetSource('', '');
             cloudRefreshUserBadge();
-            cloudRenderFloatToggle();
 
-            // 顶栏右侧操作按钮组（含超管专属按钮），按角色动态重建
-            cloudRebuildTopBar();
-        }
-
-        var cloudTopWrapEl = null;
-        var cloudMoreMenuEl = null;
-        var cloudMoreDocClickBound = false;
-        function cloudIsSuper() { return cloudGetRole() === 'super'; }
-        function cloudRebuildTopBar() {
-            const oldWrap = cloudTopWrapEl;
-            if (oldWrap && oldWrap.parentNode) oldWrap.parentNode.removeChild(oldWrap);
+            // 顶栏右侧操作按钮组
             const wrap = document.createElement('div');
             wrap.style.cssText = 'position:fixed;top:12px;right:128px;z-index:9000;display:flex;gap:6px;';
-            cloudTopWrapEl = wrap;
             const mk = function (txt, fn, bg, title) {
                 const b = document.createElement('button');
                 b.textContent = txt;
                 b.title = title || txt;
-                b.style.cssText = 'padding:8px 12px;border:none;border-radius:20px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.18);color:#fff;background:' + (bg || '#334155') + ';white-space:nowrap;';
+                b.style.cssText = 'padding:8px 12px;border:none;border-radius:20px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.18);color:#fff;background:' + (bg || '#334155') + ';';
                 b.addEventListener('click', fn);
                 return b;
             };
-            if (cloudIsDemo && cloudIsDemo()) {
-                // 演示模式：顶栏只保留演示相关按钮，不渲染任何云端操作
-                const exitBtn = mk('⬅ 退出演示', function () { cloudExitDemo(); }, '#0f766e', '清除本次演示数据并回到登录页');
-                exitBtn.id = 'cloudExitDemoBtn';
-                wrap.appendChild(exitBtn);
-                wrap.appendChild(mk('🔄 换一组数据', function () { cloudDemoRegen(); }, '#334155', '重新生成一组随机演示数据（刷新页面）'));
-                document.body.appendChild(wrap);
-                return;
-            }
-            // 所有角色共有的核心高频按钮常驻展示
-            wrap.appendChild(mk('⬆ 保存到云端', function () { cloudSaveNow(); }, '#065f46', '把碎卡审核/集赞礼兑记录（小表）写入云端；订单大表本地导入不上云'));
-            wrap.appendChild(mk('⬇ 拉取记录合并', function () { cloudLoadFromServer(false); }, '#1d4ed8', '拉取云端上一班记录，并入当前页面（只增改不删除）'));
-            if (cloudIsSuper()) {
-                // 超管：低频/管理/危险操作收进「更多」下拉，顶栏保持清爽不拥挤
-                const moreBtn = mk('☰ 更多', function (ev) { cloudToggleMoreMenu(ev); }, '#334155', '云数据管理、云端日志、退出登录等更多操作');
-                moreBtn.id = 'cloudMoreBtn';
-                wrap.appendChild(moreBtn);
-                cloudMoreMenuEl = document.createElement('div');
-                cloudMoreMenuEl.id = 'cloudMoreMenu';
-                cloudMoreMenuEl.style.cssText = 'display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:9002;background:#fff;border:1px solid #eef2f6;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.22);padding:6px;min-width:240px;';
-                const item = function (txt, color, fn, desc) {
-                    const it = document.createElement('div');
-                    it.style.cssText = 'display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:#1e293b;';
-                    it.title = desc || txt;
-                    it.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span><span>' + txt + '</span>';
-                    it.addEventListener('mouseenter', function () { it.style.background = '#f1f5f9'; });
-                    it.addEventListener('mouseleave', function () { it.style.background = 'transparent'; });
-                    it.addEventListener('click', function () { cloudCloseMoreMenu(); fn(); });
-                    return it;
-                };
-                const dv = document.createElement('div');
-                dv.style.cssText = 'height:1px;background:#eef2f6;margin:4px 8px;';
-                cloudMoreMenuEl.appendChild(item('以本地覆盖云端', '#b45309', function () { cloudForceSaveNow(); }, '【超管】不合并，直接把本页数据整份覆盖云端（云端旧记录会被替换）'));
-                cloudMoreMenuEl.appendChild(item('清空云端审核数据', '#b91c1c', function () { cloudResetRemoteData(); }, '【超管】把云端碎卡/集赞记录清空为 0（账号、日志与本地数据不受影响）'));
-                cloudMoreMenuEl.appendChild(item('云端日志', '#6d28d9', function () { cloudShowCloudLogs(); }, '【超管】查看最近 200 条云端保存记录（谁在何时保存）'));
-                cloudMoreMenuEl.appendChild(dv);
-                cloudMoreMenuEl.appendChild(item('退出登录', '#64748b', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '清除本机 token 并回到登录页'));
-                wrap.appendChild(cloudMoreMenuEl);
-                if (!cloudMoreDocClickBound) {
-                    cloudMoreDocClickBound = true;
-                    document.addEventListener('click', function (e) {
-                        const m = document.getElementById('cloudMoreMenu');
-                        if (!m || m.style.display !== 'block') return;
-                        const btn = document.getElementById('cloudMoreBtn');
-                        if (btn && btn.contains(e.target)) return;
-                        if (!m.contains(e.target)) m.style.display = 'none';
-                    });
-                }
-            } else {
-                // 普通管理员：核心操作 + 退出，无需折叠
-                wrap.appendChild(mk('退出', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '#64748b', '清除本机 token 并回到登录页'));
-            }
+            wrap.appendChild(mk('⬆ 保存到云端', function () { cloudSaveNow(); }, '#065f46', '立即把当前内存数据（主订单/碎卡/集赞）写入云端同一份数据'));
+            wrap.appendChild(mk('⬇ 从云端载入', function () { cloudLoadFromServer(false); }, '#1d4ed8', '从云端拉取数据并覆盖当前页面（会先确认）'));
+            wrap.appendChild(mk('退出', function () { if (window.confirm('确认退出登录？')) cloudLogout(); }, '#64748b', '清除本机 token 并回到登录页'));
             document.body.appendChild(wrap);
-        }
-        function cloudToggleMoreMenu(ev) {
-            if (ev) ev.stopPropagation();
-            if (!cloudMoreMenuEl) return;
-            cloudMoreMenuEl.style.display = (cloudMoreMenuEl.style.display === 'block') ? 'none' : 'block';
-        }
-        function cloudCloseMoreMenu() {
-            if (cloudMoreMenuEl) cloudMoreMenuEl.style.display = 'none';
-        }
-
-        // 【超管】以本地覆盖云端：跳过“先拉后合并”，把当前页面小表整份写入云端
-        async function cloudForceSaveNow() {
-            if (!cloudGetToken()) { cloudShowLogin('请先登录'); return; }
-            if (!cloudIsSuper()) { cloudToast('仅超级管理员可执行', true); return; }
-            if (!cloudHasAnyData()) { cloudToast('本地暂无记录可上传', true); return; }
-            if (!window.confirm('确定以本地数据覆盖云端？\n\n操作说明：\n· 云端现有的碎卡/集赞记录将被本页数据整份替换（不走合并）\n· 云端被替换掉的旧记录不可恢复\n· 本页本地数据不受影响\n\n确认执行请点“确定”。')) return;
-            cloudSavingBusy = true;
-            cloudStatusPill('覆盖保存中…');
-            try {
-                const snap = cloudCollectSnapshot();
-                await cloudPutData(snap);
-                cloudStatusPill('已用本地数据覆盖云端（更新于 ' + snap.updatedAt + '）');
-                cloudSetSource(cloudGetUser(), snap.updatedAt);
-                cloudLogPush('【超管】以本地覆盖云端（更新于 ' + snap.updatedAt + '）', 'ok');
-                cloudToast('已用本地数据覆盖云端');
-            } catch (e) {
-                if (e && e.status === 401) { cloudStatusPill('登录过期', '#ffd6d6'); cloudLogPush('覆盖保存失败：登录已过期', 'err'); cloudShowLogin('登录已过期，请重新登录'); }
-                else { cloudStatusPill('覆盖保存失败', '#ffd6d6'); cloudLogPush('覆盖保存失败（网络/服务异常）', 'err'); cloudToast('覆盖失败：' + (e && e.message ? e.message : '网络异常'), true); }
-            } finally {
-                cloudSavingBusy = false;
-            }
-        }
-
-        // 【超管】清空云端审核数据：把云端小表写为空快照（账号/日志/本地数据均不动）
-        async function cloudResetRemoteData() {
-            if (!cloudGetToken()) { cloudShowLogin('请先登录'); return; }
-            if (!cloudIsSuper()) { cloudToast('仅超级管理员可执行', true); return; }
-            if (!window.confirm('确定清空云端审核数据？\n\n操作说明：\n· 云端现有碎卡审核 / 集赞礼兑记录将全部清空（写为空快照）\n· 账号、云端日志、您本地的数据均不受影响\n· 如需重新上传，导入 Excel 后点“保存到云端”即可\n\n确认执行请点“确定”。')) return;
-            cloudSavingBusy = true;
-            cloudStatusPill('清空中…');
-            try {
-                const now = cloudNowText();
-                const emptySnap = { schema: 'gacha-order-analysis/v2', updatedAt: now, updatedBy: cloudGetUser() || 'unknown', suika: { submissions: [], rawCache: null }, jizan: { exportData: [] } };
-                await cloudPutData(emptySnap);
-                cloudSetSource('', '');
-                cloudStatusPill('云端审核数据已清空（' + now + '）');
-                cloudLogPush('【超管】已清空云端审核数据（' + now + '）', 'ok');
-                cloudToast('云端审核数据已清空，本地数据未受影响');
-            } catch (e) {
-                if (e && e.status === 401) { cloudStatusPill('登录过期', '#ffd6d6'); cloudLogPush('清空云端失败：登录已过期', 'err'); cloudShowLogin('登录已过期，请重新登录'); }
-                else { cloudStatusPill('清空云端失败', '#ffd6d6'); cloudLogPush('清空云端失败（网络/服务异常）', 'err'); cloudToast('清空失败：' + (e && e.message ? e.message : '网络异常'), true); }
-            } finally {
-                cloudSavingBusy = false;
-            }
-        }
-
-        // 【超管】云端日志管理：查看 + 筛选 + 删除单条 + 清空全部（仅 super）
-        async function cloudShowCloudLogs() {
-            if (!cloudGetToken()) { cloudShowLogin('请先登录'); return; }
-            if (!cloudIsSuper()) { cloudToast('仅超级管理员可执行', true); return; }
-            const logs = await cloudLogFetch();
-            if (logs === null) return;
-            cloudLogManagerShow(logs);
-        }
-
-        async function cloudLogFetch() {
-            try {
-                const json = await cloudRequest('/api/log', 'GET');
-                return (json && Array.isArray(json.logs)) ? json.logs : [];
-            } catch (e) {
-                if (e && e.status === 401) cloudShowLogin('登录已过期，请重新登录');
-                else cloudToast('云端日志拉取失败：' + (e && e.message ? e.message : '网络异常'), true);
-                return null;
-            }
-        }
-
-        // ---- 日志管理器 UI（仅超管进入）----
-        var cloudLogManagerState = null; // { logs, user, date, kw }
-        async function cloudLogManagerShow(logs) {
-            const old = document.getElementById('cloudLogOverlay');
-            if (old && old.parentNode) old.parentNode.removeChild(old);
-            const users = [];
-            (logs || []).forEach(function (g) { if (g.user && users.indexOf(g.user) < 0) users.push(g.user); });
-            users.sort();
-
-            const ov = document.createElement('div');
-            ov.id = 'cloudLogOverlay';
-            ov.style.cssText = 'position:fixed;inset:0;z-index:11550;display:flex;align-items:center;justify-content:center;background:rgba(15,30,48,0.74);backdrop-filter:blur(2px);';
-            ov.onclick = function (e) { if (e.target === ov) cloudLogManagerClose(); };
-            const box = document.createElement('div');
-            box.style.cssText = 'background:#fff;border-radius:16px;padding:22px 26px;width:840px;max-width:94vw;box-shadow:0 18px 60px rgba(0,0,0,0.35);font-family:-apple-system,\'Segoe UI\',Roboto,sans-serif;';
-            box.innerHTML =
-                '<div style="font-size:18px;font-weight:bold;color:#20517d;margin-bottom:14px;">云端操作日志（<span id="clCount"></span>）<span style="font-weight:normal;font-size:12px;color:#94a3b8;margin-left:8px;">仅超管可删除/清空；云端最多保留 200 条</span></div>' +
-                '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">' +
-                '  <select id="clUser" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;max-width:150px;"></select>' +
-                '  <input id="clDate" placeholder="日期(如 2026-09-05)" style="width:150px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">' +
-                '  <input id="clKw" placeholder="操作关键字(如 保存/清空)" style="width:170px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">' +
-                '  <button id="clDoFilter" style="padding:6px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:13px;cursor:pointer;">筛选</button>' +
-                '  <button id="clReset" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#475569;font-size:13px;cursor:pointer;">重置</button>' +
-                '</div>' +
-                '<div id="clList" style="border:1px solid #e2e8f0;border-radius:10px;max-height:48vh;overflow:auto;background:#f8fafc;"></div>' +
-                '<div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;">' +
-                '  <button id="clClear" style="padding:8px 16px;border:0;border-radius:8px;background:#b91c1c;color:#fff;font-size:13px;cursor:pointer;">清空全部日志</button>' +
-                '  <div style="display:flex;gap:10px;">' +
-                '    <button id="clRefresh" style="padding:8px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#475569;font-size:13px;cursor:pointer;">刷新</button>' +
-                '    <button id="clClose" style="padding:8px 20px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:13px;cursor:pointer;">关闭</button>' +
-                '  </div>' +
-                '</div>';
-            ov.appendChild(box);
-            document.body.appendChild(ov);
-
-            cloudLogManagerState = { logs: logs || [], user: '', date: '', kw: '' };
-
-            const sel = document.getElementById('clUser');
-            sel.innerHTML = '<option value="">全部账号</option>' + users.map(function (u) { return '<option value="' + u + '">' + u + '</option>'; }).join('');
-
-            document.getElementById('clDoFilter').onclick = function () {
-                cloudLogManagerState.user = sel.value;
-                cloudLogManagerState.date = document.getElementById('clDate').value.trim();
-                cloudLogManagerState.kw = document.getElementById('clKw').value.trim();
-                cloudLogManagerRender();
-            };
-            document.getElementById('clReset').onclick = function () {
-                sel.value = ''; document.getElementById('clDate').value = ''; document.getElementById('clKw').value = '';
-                cloudLogManagerState.user = ''; cloudLogManagerState.date = ''; cloudLogManagerState.kw = '';
-                cloudLogManagerRender();
-            };
-            document.getElementById('clRefresh').onclick = async function () {
-                const fresh = await cloudLogFetch();
-                if (fresh !== null) { cloudLogManagerState.logs = fresh; cloudLogManagerRender(); }
-            };
-            document.getElementById('clClear').onclick = function () { cloudLogManagerClear(); };
-            document.getElementById('clClose').onclick = function () { cloudLogManagerClose(); };
-
-            const listEl = document.getElementById('clList');
-            listEl.onclick = function (e) {
-                const t = e.target;
-                if (!t || !t.classList || !t.classList.contains('cl-del')) return;
-                const idx = parseInt(t.getAttribute('data-idx'), 10);
-                if (isNaN(idx)) return;
-                if (window.confirm('确认删除这条日志记录？\n删除后不可恢复，系统会额外记一条删除痕迹。')) cloudLogManagerDelete(idx);
-            };
-            cloudLogManagerRender();
-        }
-
-        function cloudLogManagerFiltered() {
-            const st = cloudLogManagerState || { logs: [], user: '', date: '', kw: '' };
-            return (st.logs || []).filter(function (g) {
-                if (st.user && g.user !== st.user) return false;
-                if (st.date && String(g.t || '').indexOf(st.date) !== 0) return false;
-                if (st.kw) {
-                    const text = ((g.user || '') + ' ' + (g.action || '')).toLowerCase();
-                    if (text.indexOf(st.kw.toLowerCase()) < 0) return false;
-                }
-                return true;
-            });
-        }
-
-        function cloudLogManagerRender() {
-            if (!document.getElementById('cloudLogOverlay')) return;
-            const st = cloudLogManagerState || { logs: [] };
-            const filtered = cloudLogManagerFiltered();
-            document.getElementById('clCount').textContent = (st.logs || []).length + ' 条' + (filtered.length !== (st.logs || []).length ? '（筛选出 ' + filtered.length + ' 条）' : '');
-            const list = document.getElementById('clList');
-            if (!filtered.length) { list.innerHTML = '<div style="padding:26px;color:#94a3b8;text-align:center;">（没有符合条件的日志）</div>'; return; }
-            const rows = [];
-            for (let i = filtered.length - 1; i >= 0; i--) {
-                const g = filtered[i];
-                const origIdx = (st.logs || []).indexOf(g);
-                rows.push('<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid #eef2f7;font-size:13px;color:#334155;">' +
-                    '<span style="color:#94a3b8;white-space:nowrap;">[' + (g.t || '-') + ']</span>' +
-                    '<span style="font-weight:bold;white-space:nowrap;min-width:56px;">' + (g.user || '-') + '</span>' +
-                    '<span style="flex:1;word-break:break-all;">' + (g.action || '保存') + (g.size ? '（' + g.size + ' B）' : '') + '</span>' +
-                    '<button class="cl-del" data-idx="' + origIdx + '" style="flex:0 0 auto;padding:2px 10px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#b91c1c;font-size:12px;cursor:pointer;">删除</button>' +
-                    '</div>');
-            }
-            list.innerHTML = rows.join('');
-        }
-
-        async function cloudLogManagerDelete(idx) {
-            try {
-                await cloudRequest('/api/log?id=' + idx, 'DELETE');
-                cloudToast('已删除该日志记录');
-                const fresh = await cloudLogFetch();
-                if (fresh !== null) { cloudLogManagerState.logs = fresh; cloudLogManagerRender(); }
-            } catch (e) {
-                if (e && e.status === 401) cloudShowLogin('登录已过期，请重新登录');
-                else if (e && e.status === 403) cloudToast('仅超级管理员可删除日志', true);
-                else cloudToast('删除失败：' + (e && e.message ? e.message : '网络异常'), true);
-            }
-        }
-
-        async function cloudLogManagerClear() {
-            const st = cloudLogManagerState || { logs: [] };
-            const n = (st.logs || []).length;
-            if (!n) { cloudToast('当前没有日志可清空', true); return; }
-            if (!window.confirm('确认清空全部云端日志？\n\n· 将删除全部 ' + n + ' 条日志\n· 删除后不可恢复\n· 系统会保留一条“清空全部日志”的审计记录\n\n确认请点“确定”。')) return;
-            try {
-                const ret = await cloudRequest('/api/log?all=1', 'DELETE');
-                cloudToast('已清空全部日志' + (ret && typeof ret.cleared === 'number' ? '（原 ' + ret.cleared + ' 条）' : ''));
-                const fresh = await cloudLogFetch();
-                if (fresh !== null) { cloudLogManagerState.logs = fresh; cloudLogManagerRender(); }
-            } catch (e) {
-                if (e && e.status === 401) cloudShowLogin('登录已过期，请重新登录');
-                else if (e && e.status === 403) cloudToast('仅超级管理员可清空日志', true);
-                else cloudToast('清空失败：' + (e && e.message ? e.message : '网络异常'), true);
-            }
-        }
-
-        function cloudLogManagerClose() {
-            const ov = document.getElementById('cloudLogOverlay');
-            if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
-            cloudLogManagerState = null;
-        }
-        // ==================== 演示模式（Demo Mode）====================
-        // 演示模式仅用于功能展示：由本模块在浏览器本地随机生成一批结构合规的示例订单，
-        // 复用主渲染链（processData / renderCharts 等）展示完整页面效果。
-        // 全程不发起任何云端请求，与真实云端数据物理隔离；进入后云端写按钮一律不渲染。
-        var cloudDemoMode = false;
-        function cloudIsDemo() { return !!cloudDemoMode; }
-
-        function cloudDemoFmt(dt) {
-            const p2 = function (n) { return (n < 10 ? '0' : '') + n; };
-            return dt.getFullYear() + '-' + p2(dt.getMonth() + 1) + '-' + p2(dt.getDate()) + ' ' + p2(dt.getHours()) + ':' + p2(dt.getMinutes()) + ':' + p2(dt.getSeconds());
-        }
-
-        // 在不同活动时段附近取演示支付时间，制造覆盖各活动区间（1小时/6小时/24小时/浪漫/周末/终极）的分布
-        function cloudDemoTime(rnd, slot) {
-            const A = new Date('2026-07-11T17:20:00');
-            const slotStarts = [
-                new Date('2026-07-11T17:20:00'),               // 0：开售 0-1 小时
-                new Date('2026-07-11T18:26:00'),               // 1：开售 1-6 小时
-                new Date('2026-07-11T23:26:00'),               // 2：开售 6-24 小时
-                new Date('2026-07-13T12:00:00'),               // 3：浪漫活动期
-                new Date('2026-07-18T12:00:00'),               // 4：周末活动期
-                new Date('2026-07-25T12:00:00'),               // 5：终极活动期
-                new Date('2026-08-01T00:00:00')                // 6：活动后零星时段
-            ];
-            const spansMs = [60, 66, 355, 18, 20, 20, 12];
-            const spanH = spansMs[slot] * 60 * 60 * 1000;
-            if (slot >= 6) return new Date(slotStarts[6].getTime() + Math.floor(rnd() * 12 * 24 * 60 * 60 * 1000));
-            if (slot <= 2) {
-                // 开售 24h 内分布（严格 0-1h / 1-6h / 6-24h）
-                const ms = spansMs[slot] * 60 * 1000;
-                return new Date(slotStarts[slot].getTime() + Math.floor(rnd() * ms));
-            }
-            return new Date(slotStarts[slot].getTime() + Math.floor(rnd() * spanH));
-        }
-
-        // 随机卡面编号（贴近真实命名形态：SSSR/SSR/SR/R/N + 序号）
-        function cloudDemoCardId(rnd) {
-            const r = rnd();
-            let type = 'N', maxNum = 20;
-            if (r < 0.03) { type = 'SSSR'; maxNum = 8; }
-            else if (r < 0.28) { type = 'SSR'; maxNum = 30; }
-            else if (r < 0.78) { type = 'SR'; maxNum = 52; }
-            else if (r < 0.96) { type = 'R'; maxNum = 60; }
-            return type + (1 + Math.floor(rnd() * maxNum));
-        }
-
-        // 演示卡片商品名模板（须含 '周柯宇' 与卡面编号，processData 才判定为有效卡片订单）
-        function cloudDemoCardItem(rnd, id, qty) {
-            return '周柯宇爱意正值炽夏小卡抽抽乐-' + (id || cloudDemoCardId(rnd)) + '[购买数量:' + qty + ']';
-        }
-
-        // 生成一批演示主订单行（纯本地随机，无任何真实用户信息）
-        function cloudGenDemoOrders() {
-            const rnd = (function () {
-                let s = 20260711;
-                return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
-            })();
-            const phones = new Set();
-            const nickSeed = 'abcdefghjkmnpqrstuvwxyz23456789';
-            const users = [];
-            const nUsers = 96;
-            for (let i = 0; i < nUsers; i++) {
-                let phone;
-                do { phone = '13' + String(900000000 + Math.floor(rnd() * 99999999)); } while (phones.has(phone));
-                phones.add(phone);
-                let nick = '';
-                for (let k = 0; k < 5; k++) nick += nickSeed.charAt(Math.floor(rnd() * nickSeed.length));
-                // 每用户第一单所处时段：优先活动窗口，少量开售早期制造“早期奖励/限时活动”展示位
-                const slot = [3, 3, 4, 4, 5, 5, 2, 1, 0, 0, 3, 4, 5][Math.floor(rnd() * 13)];
-                const nOrders = 1 + Math.floor(rnd() * 4);
-                users.push({ index: i + 1, phone: phone, wechat: 'zy_' + nick, name: '演示用户' + (i + 1), slot: slot, nOrders: nOrders, first: true });
-            }
-            const rows = [];
-            let orderSeq = 0;
-            users.forEach(function (u) {
-                for (let o = 0; o < u.nOrders; o++) {
-                    // 同一用户的所有订单落在同一活动时段附近（非首单加少量分钟级偏移，模拟连续追加购买）
-                    let dt = cloudDemoTime(rnd, u.slot);
-                    if (o > 0) dt = new Date(dt.getTime() + (1 + Math.floor(rnd() * 180)) * 60 * 1000);
-                    const isEarly = (o === 0 && u.slot === 0);
-                    const items = [];
-                    let totalQty = 0;
-                    let giftStr = '';
-                    // 主卡片/端盒单
-                    const isBoxOrder = (o === 0 && u.slot === 0 && rnd() < 0.20) || (o === 0 && rnd() < 0.08);
-                    const isBuyouOrder = (!isBoxOrder) && (o === 0 ? rnd() < 0.06 : rnd() < 0.10);
-                    if (isBoxOrder) {
-                        // 端盒：1 个端盒 + 若干补抽卡片；端盒商品本身按 375 抽计
-                        items.push('周柯宇爱意正值炽夏小卡抽抽乐-端盒[购买数量:1]');
-                        totalQty += 1;
-                        const extra = 4 + Math.floor(rnd() * 8);
-                        for (let k = 0; k < extra; k++) {
-                            const q = 1 + Math.floor(rnd() * 3);
-                            items.push(cloudDemoCardItem(rnd, '', q));
-                            totalQty += q;
-                        }
-                    } else if (isBuyouOrder) {
-                        const q = 1;
-                        items.push('【补邮转链】「周柯宇 fully unlocked」爱意正值炽夏小卡抽抽乐-' + cloudDemoCardId(rnd) + '[购买数量:' + q + ']');
-                        totalQty += q;
-                    } else {
-                        const q = (isEarly && o === 0) ? (10 + Math.floor(rnd() * 14)) : (1 + Math.floor(rnd() * 12));
-                        items.push(cloudDemoCardItem(rnd, '', q));
-                        totalQty += q;
-                        if (rnd() < 0.30) {
-                            const g = cloudDemoCardItem(rnd, '', 1 + Math.floor(rnd() * 2));
-                            items.push(g);
-                            totalQty += 1 + Math.floor(rnd() * 2);
-                        }
-                        if (rnd() < 0.22) {
-                            const g2 = cloudDemoCardItem(rnd, '', 1);
-                            items.push(g2);
-                            totalQty += 1;
-                        }
-                        // 少量单附“奖品”赠品（真实开奖落在赠品列，格式为 奖品:卡面号）
-                        if (rnd() < 0.30) {
-                            giftStr = '奖品:' + cloudDemoCardId(rnd);
-                        }
-                    }
-                    orderSeq++;
-                    const t = new Date(dt.getTime());
-                    rows.push({
-                        '订单编号': 'D' + (2026071100000 + orderSeq),
-                        '下单账号': u.wechat,
-                        '收货人/提货人手机号': u.phone,
-                        '收货人/提货人姓名': u.name,
-                        '支付时间': cloudDemoFmt(t),
-                        '订单描述': items.join(';'),
-                        '赠品': giftStr,
-                        '商品总件数': String(totalQty)
-                    });
-                }
-            });
-            // 打乱顺序，模拟多用户交错下单
-            for (let i = rows.length - 1; i > 0; i--) {
-                const j = Math.floor(rnd() * (i + 1));
-                const tmp = rows[i]; rows[i] = rows[j]; rows[j] = tmp;
-            }
-            return rows;
-        }
-
-        // 演示数据：碎卡兑换提交（结构对齐真实审核链所需，全部程序化随机合成、无真实信息；复用 auditSubmission/renderSuikaResults 渲染链）
-        function cloudGenDemoSuika() {
-            if (typeof rawOrdersData === 'undefined' || !Array.isArray(rawOrdersData) || !rawOrdersData.length) return { total: 0, pass: 0, notFound: 0, handle: 0 };
-            if (typeof suikaSubmissions === 'undefined' || !Array.isArray(suikaSubmissions)) return { total: 0, pass: 0, notFound: 0, handle: 0 };
-            suikaSubmissions.length = 0;
-            const rnd = (function () { let s = 20260713; return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();
-            try { userCardCountsMap = buildUserCardCounts(rawOrdersData); } catch (e0) {}
-            const users = (typeof userData !== 'undefined' && Array.isArray(userData)) ? userData : [];
-            if (!users.length) return { total: 0, pass: 0, notFound: 0, handle: 0 };
-            const nicks = ['小柯爱抽卡', '柯柯奶茶三分甜', '端盒上瘾中', '攒卡预备役', '星月糖豆', '桃桃乌龙茶', '糖霜栗子糕', '追光小柚子', '白日梦想家zy', '晚风与柯'];
-            let seq = 0;
-            const mkCode = function () { seq++; return 'DK' + (1000 + ((seq * 7) % 900)); };
-            const mkTime = function () { return cloudDemoFmt(new Date(2026, 7, 1 + Math.floor(rnd() * 18), 9 + Math.floor(rnd() * 11), Math.floor(rnd() * 60), Math.floor(rnd() * 60))); };
-            const mkPhone = function (head) { return head + String(10000000 + Math.floor(rnd() * 89999999)); };
-            const list = [];
-            // 1) 通过组：随机挑选真实存在于演示订单池、总抽数>=36 且持有>=6 张同卡的用户，申报 6 张换入 R/SR（36 抽档）
-            const passCands = users.filter(function (u) { return (u.totalDraws || 0) >= 36; });
-            let passCount = 0;
-            for (let i = 0; i < passCands.length && passCount < 12; i += 2) {
-                const u = passCands[i];
-                const cm = (userCardCountsMap[u.wechat] && userCardCountsMap[u.wechat].counts) || {};
-                const held = Object.keys(cm).filter(function (k) { return cm[k] >= 6; });
-                const orderNo = String(u.orderNos || '').split(';')[0] || '';
-                if (!held.length || !orderNo) continue;
-                // 通过组换入卡限定 SR/R 档（36 抽档规则内），避免 SSR/SSSR 高阶抽数条件干扰“通过”演示
-                let inCard = cloudDemoCardId(rnd);
-                while (inCard.indexOf('SSSR') === 0 || inCard.indexOf('SSR') === 0 || inCard.indexOf('N') === 0) { inCard = cloudDemoCardId(rnd); }
-                list.push({
-                    code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '演示粉丝' + (i + 1),
-                    phone: String(u.phone || ''), orderNo: orderNo, submitTime: mkTime(),
-                    requests: [{ inCard: inCard, inQty: 1, outCards: [{ card: held[Math.floor(rnd() * held.length)], qty: 6 }] }]
-                });
-                passCount++;
-            }
-            // 2) 需人工处理组：申报的换出卡数量超出实际持有（触发“数量不足”走人工复核）
-            const handleCands = users.filter(function (u) { return (u.totalDraws || 0) >= 36; });
-            let handleCount = 0;
-            for (let i = 1; i < handleCands.length && handleCount < 3; i += 3) {
-                const u = handleCands[i];
-                const cm = (userCardCountsMap[u.wechat] && userCardCountsMap[u.wechat].counts) || {};
-                const short = Object.keys(cm).filter(function (k) { const q = cm[k]; return q >= 1 && q < 6; });
-                const orderNo = String(u.orderNos || '').split(';')[0] || '';
-                if (!short.length || !orderNo) continue;
-                list.push({
-                    code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '演示粉丝' + (i + 100),
-                    phone: String(u.phone || ''), orderNo: orderNo, submitTime: mkTime(),
-                    requests: [{ inCard: cloudDemoCardId(rnd), inQty: 1, outCards: [{ card: short[Math.floor(rnd() * short.length)], qty: 6 }] }]
-                });
-                handleCount++;
-            }
-            // 3) 未找到用户组：手机号取演示订单池外号段（135-138），订单号伪造，必不命中真实匹配
-            const fakeHeads = ['135', '136', '137', '138'];
-            const fakeCount = 2 + Math.floor(rnd() * 2);
-            for (let i = 0; i < fakeCount; i++) {
-                list.push({
-                    code: mkCode(), nickname: nicks[Math.floor(rnd() * nicks.length)], name: '',
-                    phone: mkPhone(fakeHeads[Math.floor(rnd() * fakeHeads.length)]), orderNo: 'FZ' + (100000 + Math.floor(rnd() * 899999)), submitTime: mkTime(),
-                    requests: [{ inCard: cloudDemoCardId(rnd), inQty: 1, outCards: [{ card: cloudDemoCardId(rnd), qty: 6 }] }]
-                });
-            }
-            // 匹配演示订单用户并复用真实审核链（与导入口径一致：手机号/订单号定位，逐提交按剩余抽数核算）
-            list.forEach(function (s) {
-                try {
-                    const matched = findUserByPhoneOrderDetail(s.phone, s.orderNo, s.nickname, s.name, {});
-                    s.user = matched.user; s.userMatch = matched;
-                } catch (e3) { s.user = null; s.userMatch = null; }
-                s.audit = auditSubmission(s, s.user ? Math.max(0, s.user.totalDraws || 0) : undefined);
-            });
-            suikaSubmissions = list;
-            suikaAuditMap = {};
-            suikaSubmissions.forEach(function (s) {
-                if (s.user) {
-                    if (!suikaAuditMap[s.user.wechat]) suikaAuditMap[s.user.wechat] = [];
-                    suikaAuditMap[s.user.wechat].push(s);
-                }
-            });
-            renderSuikaResults();
-            const st = { pass: 0, notFound: 0, handle: 0 };
-            suikaSubmissions.forEach(function (s) {
-                if (!s.audit) return;
-                if (s.audit.status === '通过') st.pass++;
-                else if (s.audit.status === '未找到用户') st.notFound++;
-                else st.handle++;
-            });
-            return { total: suikaSubmissions.length, pass: st.pass, notFound: st.notFound, handle: st.handle };
-        }
-
-        // 演示数据：集赞兑换/宣传集赞礼（结构对齐 jizanExportData，全部程序化随机合成；复用 replayJizanGiftToUsers/renderJizanSummary 渲染链）
-        function cloudGenDemoJizan() {
-            if (typeof jizanExportData === 'undefined') return { total: 0 };
-            jizanExportData = [];
-            const rnd = (function () { let s = 20260714; return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();
-            const users = (typeof userData !== 'undefined' && Array.isArray(userData)) ? userData : [];
-            if (!users.length) return { total: 0 };
-            const pickUser = function () { return users[Math.floor(rnd() * users.length)]; };
-            const pickOrder = function (u) { const arr = String(u.orderNos || '').split(';').filter(Boolean); return arr.length ? arr[Math.floor(rnd() * arr.length)] : ''; };
-            const list = [];
-            // pass Sheet：6 条匹配成功（宣传集赞礼=随机卡面编号）
-            for (let i = 0; i < 6; i++) {
-                const u = pickUser();
-                list.push({ sheet: 'pass', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd), note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
-            }
-            // repeat Sheet：2 条匹配成功（重复填写→卡面编号+？待核实），1 条缺订单号信息需人工确认
-            for (let i = 0; i < 2; i++) {
-                const u = pickUser();
-                list.push({ sheet: 'repeat', phone: String(u.phone || ''), orderNo: pickOrder(u), card: cloudDemoCardId(rnd) + '？待核实', note: '', check: '', matched: true, ambiguous: false, missingInfo: false, accounts: [], wechat: u.wechat, matchedKey: 'phone_order' });
-            }
-            const u2 = pickUser();
-            list.push({ sheet: 'repeat', phone: String(u2.phone || ''), orderNo: '', card: '', note: '', check: '', matched: true, ambiguous: false, missingInfo: true, accounts: [], wechat: '', matchedKey: '' });
-            // fail Sheet：1 条匹配失败（异常，请联系客服）
-            const u3 = pickUser();
-            list.push({ sheet: 'fail', phone: '136' + String(10000000 + Math.floor(rnd() * 89999999)), orderNo: 'FZ' + (100000 + Math.floor(rnd() * 899999)), card: '', note: '', check: '', matched: false, ambiguous: false, missingInfo: false, accounts: [], wechat: '', matchedKey: '' });
-            jizanExportData = list;
-            try { if (typeof replayJizanGiftToUsers === 'function') replayJizanGiftToUsers(); } catch (e5) {}
-            try {
-                if (typeof renderJizanSummary === 'function' && typeof buildJizanSummaryFromExport === 'function') renderJizanSummary(buildJizanSummaryFromExport(), true);
-            } catch (e6) {}
-            return { total: jizanExportData.length };
-        }
-
-        // 进入演示时的提示弹窗：醒目声明“随机生成、非真实数据”，用户点击确认后关闭，不再遮挡页面标题。
-        var cloudDemoNoticeEl = null;
-        function cloudDemoEnsureNotice() {
-            if (cloudDemoNoticeEl && document.body.contains(cloudDemoNoticeEl)) return cloudDemoNoticeEl;
-            const old = document.getElementById('cloudDemoNotice');
-            if (old && old.parentNode) old.parentNode.removeChild(old);
-            const ov = document.createElement('div');
-            ov.id = 'cloudDemoNotice';
-            ov.style.cssText = 'position:fixed;inset:0;z-index:11500;display:flex;align-items:center;justify-content:center;background:rgba(15,30,48,0.55);backdrop-filter:blur(2px);';
-            const card = document.createElement('div');
-            card.style.cssText = 'background:#fff;border-radius:16px;padding:26px 28px;width:430px;max-width:90vw;box-shadow:0 18px 60px rgba(0,0,0,0.35);text-align:center;font-family:-apple-system,\'Segoe UI\',Roboto,sans-serif;';
-            card.innerHTML =
-                '<div style="font-size:18px;font-weight:bold;color:#0f766e;">🧪 演示模式</div>' +
-                '<div style="margin-top:12px;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:14px;font-weight:bold;color:#b45309;">⚠️ 演示数据全部为随机生成，非真实数据</div>' +
-                '<div style="margin-top:12px;font-size:13px;color:#555;line-height:1.7;">演示模式使用程序生成的随机数据，仅作功能展示，不涉及真实用户信息，也不会访问云端。本演示全程在本地运行、不连接云端，可随时点击页面右上角「退出演示」返回登录页。</div>';
-            const ok = document.createElement('button');
-            ok.textContent = '我知道了，进入演示';
-            ok.style.cssText = 'margin-top:18px;padding:10px 28px;border:none;border-radius:10px;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;font-size:14px;font-weight:bold;cursor:pointer;';
-            ok.addEventListener('click', function () { if (ov.parentNode) ov.parentNode.removeChild(ov); });
-            card.appendChild(ok);
-            ov.appendChild(card);
-            document.body.appendChild(ov);
-            cloudDemoNoticeEl = ov;
-            return ov;
-        }
-
-        function cloudDemoRegen() {
-            const url = new URL(location.href);
-            url.searchParams.set('demo', '1');
-            location.href = url.toString();
-        }
-
-        function cloudExitDemo() {
-            if (window.confirm('退出演示模式？将清除本次演示数据并回到登录页。')) {
-                cloudDemoMode = false;
-                location.href = location.pathname + location.search.replace(/[?&]demo=1(&|$)/, function (m, tail) { return tail ? '?' : ''; }).replace(/^&/, '?');
-            }
-        }
-
-        // 演示数据：超like兑换卡面（结构对齐「按订单整理」解析结果，程序化随机合成、无真实信息；复用 applyLikeRows 匹配与三态判定链）
-        function cloudGenDemoLike() {
-            if (typeof userData === 'undefined' || !Array.isArray(userData) || !userData.length) return { total: 0 };
-            const rnd = (function () { let s = 20260914; return function () { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }; })();
-            const pickCard = function () {
-                const r = rnd();
-                if (r < 0.25) return 'SSR' + (1 + Math.floor(rnd() * 30));
-                if (r < 0.75) return 'R' + (1 + Math.floor(rnd() * 60));
-                return 'SR' + (1 + Math.floor(rnd() * 52));
-            };
-            const cands = userData.filter(function (u) { return String(u.orderNos || '').trim(); });
-            const rows = [];
-            // 1) 通过组：订单号命中主表，卡面 1~3 张
-            const nHit = Math.min(10, cands.length);
-            for (let i = 0; i < nHit; i++) {
-                const u = cands[Math.floor(rnd() * cands.length)];
-                const orderNo = String(u.orderNos || '').split(';')[0] || '';
-                if (!orderNo) continue;
-                const n = 1 + Math.floor(rnd() * 3);
-                const cards = [];
-                for (let k = 0; k < n; k++) cards.push(pickCard());
-                rows.push({ orderNo: orderNo, cardText: cards.join('，') });
-            }
-            // 2) 未匹配组：订单号不在主表
-            rows.push({ orderNo: '88888888888888', cardText: 'R5，SSR7' });
-            rows.push({ orderNo: '99999999999999', cardText: 'SSR1' });
-            // 3) 填写不完整组：卡面为空
-            if (rows.length) rows.push({ orderNo: rows[0].orderNo, cardText: '' });
-            // 4) 同号多账号组：让两个演示账号共用同一（示例）订单号
-            if (cands.length >= 2) {
-                const shared = 'D2026071199999';
-                cands[0].orderNos = String(cands[0].orderNos || '') + ';' + shared;
-                cands[1].orderNos = String(cands[1].orderNos || '') + ';' + shared;
-                rows.push({ orderNo: shared, cardText: 'SSR7，R5' });
-            }
-            applyLikeRows({ rows: rows });
-            replayLikeExchangeToUsers();
-            return { total: (typeof likeExchangeData !== 'undefined' && likeExchangeData) ? likeExchangeData.length : 0 };
-        }
-
-        // 演示入口：进入演示态 -> 程序化生成随机订单 -> 复用现有渲染链完整展示
-        async function cloudEnterDemo() {
-            cloudDemoMode = true;
-            if (cloudPillUserEl) cloudPillUserEl.textContent = '演示模式';
-            if (cloudPillStatusEl) { cloudPillStatusEl.textContent = '｜本地随机演示数据 · 未连接云端'; cloudPillStatusEl.style.color = '#7dd3fc'; }
-            if (cloudPillSourceEl) cloudPillSourceEl.textContent = ' 数据来源：演示数据（随机生成）';
-            cloudRebuildTopBar();
-            cloudDemoEnsureNotice();
-            // 隐藏“导入 Excel”等本地上传区，避免与演示数据混用
-            try {
-                document.querySelectorAll('.upload-section').forEach(function (sec) { sec.style.display = 'none'; });
-            } catch (eIgnore) {}
-            // 生成演示主订单并复用主渲染链
-            rawOrdersData = cloudGenDemoOrders();
-            const ls = document.getElementById('loadingSection');
-            if (ls) ls.classList.remove('hidden');
-            try {
-                await processData(rawOrdersData);
-                renderRawData(rawOrdersData);
-                renderCharts();
-                cardStatsPage = 1;
-                renderStatsTables();
-                filteredData = [...userData];
-                renderTable(1);
-            } finally {
-                if (ls) ls.classList.add('hidden');
-            }
-            const rs = document.getElementById('resultSection');
-            if (rs) rs.classList.remove('hidden');
-            // 演示数据：碎卡兑换 + 集赞/宣传礼（纯程序化随机合成，复用现有审核与渲染链）
-            let suikaStat = { total: 0, pass: 0, notFound: 0, handle: 0 };
-            let jizanStat = { total: 0 };
-            try {
-                suikaStat = cloudGenDemoSuika();
-                const sr = document.getElementById('suikaResultSection');
-                if (sr) sr.classList.remove('hidden');
-            } catch (eSuika) { console.error('演示碎卡数据生成失败', eSuika); }
-            try {
-                jizanStat = cloudGenDemoJizan();
-                const jr = document.getElementById('jizanResultSection');
-                if (jr) jr.classList.remove('hidden');
-                try { filteredData = [...userData]; renderTable(1); } catch (eTbl) {}
-            } catch (eJizan) { console.error('演示集赞数据生成失败', eJizan); }
-            let likeStat = { total: 0 };
-            try {
-                likeStat = cloudGenDemoLike();
-                const lr = document.getElementById('likeResultSection');
-                if (lr) lr.classList.remove('hidden');
-                try { filteredData = [...userData]; renderTable(1); } catch (eTbl2) {}
-                try { renderLikeResultAll(); } catch (eLr2) {}
-            } catch (eLike) { console.error('演示超like兑换数据生成失败', eLike); }
-            setTimeout(function () { try { Object.values(charts).forEach(function (c) { c.resize(); }); } catch (e2) {} }, 120);
-            cloudLogPush('已进入演示模式：随机订单 ' + rawOrdersData.length + ' 行 / 演示用户 ' + userData.length + ' 人，碎卡提交 ' + suikaStat.total + ' 条（通过 ' + suikaStat.pass + '/待人工 ' + suikaStat.handle + '/未找到 ' + suikaStat.notFound + '），集赞记录 ' + jizanStat.total + ' 条，超like兑换 ' + likeStat.total + ' 条（数据为本地生成，未访问云端）', 'ok');
-            if (cloudPillStatusEl) cloudPillStatusEl.textContent = '｜演示数据已生成（订单 ' + rawOrdersData.length + ' 行 · 碎卡 ' + suikaStat.total + ' · 集赞 ' + jizanStat.total + ' · 超like兑换 ' + likeStat.total + '）· 未连接云端';
         }
 
         // ---------- 初始化：先登录门禁，token 有效则探测云端 ----------
         async function cloudInit() {
             cloudInjectUI();
-            if (new URLSearchParams(location.search).get('demo') === '1') {
-                // 演示模式直达：不校验登录、不访问云端
-                try {
-                    await cloudEnterDemo();
-                } catch (e) {
-                    console.error('演示模式加载失败', e);
-                    cloudStatusPill('演示模式加载失败', '#ffd6d6');
-                    cloudShowLogin('演示模式加载失败：' + ((e && e.message) ? e.message : '未知错误'));
-                }
-                return;
-            }
             const token = cloudGetToken();
             if (!token) {
                 cloudStatusPill('未登录');
@@ -7481,28 +6358,22 @@ var CLOUD_ROLE_KEY = 'gacha_order_cloud_role';
                             const ret = await cloudApplySnapshot(snap);
                             if (!ret.empty) {
                                 cloudStatusPill('已载入云端数据（更新于 ' + (ret.time || '-') + '）');
-                                cloudSetSource(ret.by || snap.updatedBy || '', ret.time || snap.updatedAt || '');
-                                cloudLogPush('已载入云端数据：来源账号 ' + (ret.by || snap.updatedBy || '-') + '（更新于 ' + (ret.time || '-') + '）', 'ok');
                                 alert('云端数据已载入：主订单、碎卡审核、集赞导入均已恢复，可直接查看与导出。');
                             }
                         } else {
                             cloudStatusPill('云端有数据，未自动载入');
-                            cloudLogPush('检测到云端有数据（更新于 ' + (snap.updatedAt || '-') + '），未自动载入');
                         }
                     }
                 } else {
                     cloudStatusPill('云端暂无已保存数据');
-                    cloudLogPush('云端暂无已保存数据');
                 }
             } catch (e) {
                 if (e && e.status === 401) {
                     cloudClearAuth();
                     cloudRefreshUserBadge();
-                    cloudLogPush('云端校验失败：登录已过期', 'err');
                     cloudShowLogin('登录已过期，请重新登录');
                 } else {
                     cloudStatusPill('云端不可用（网络异常），可本地使用', '#ffd6d6');
-                    cloudLogPush('云端不可用（网络异常），可本地使用', 'err');
                 }
             }
         }
