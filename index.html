@@ -2791,6 +2791,7 @@
                 XLSX.utils.book_append_sheet(workbook, exportActivityCardSheet(), '活动小卡统计');
                 XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
+                XLSX.utils.book_append_sheet(workbook, buildGoodsSheet(), '商品总表');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_全部'));
             } else if (type === 'user') {
                 XLSX.utils.book_append_sheet(workbook, exportUserSheet(), '用户统计');
