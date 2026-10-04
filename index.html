@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 20：46</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 21：45</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 20：46</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 21：45</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -2845,6 +2845,7 @@ const CARD_IMAGES = {
     'SSSR1': 'https://si.geilicdn.com/wdseller902056251807-335e0000019f475497e40a2303ea_2560_2560.jpg',
     'SSSR2': 'https://si.geilicdn.com/wdseller902056251807-3b440000019f475534860a2301af_2560_2560.jpg',
 };
+        const CARD_SET = new Set(Object.keys(CARD_IMAGES));
         function countUserCards(u) {
             const map = {};
             const STOP = /(未达标|未满10抽|未参与|审核通过|需人工|不满足|^-$|^\/$|^无$)/;
@@ -2961,15 +2962,17 @@ const GOODS_COLS = [
                 else if (name.indexOf('拍立得') >= 0) key = '拍立得';
                 else if (name.indexOf('胶片') >= 0) key = '胶片';
                 else if (name.indexOf('卡册') >= 0) key = '卡册';
-                else if (name.indexOf('mini PB') >= 0 || name.indexOf('MINI') >= 0) key = 'minipb';
+                else if (name.indexOf('mini PB') >= 0 || name.indexOf('MINI') >= 0) { key = 'minipb'; const mm = name.match(/(\d+)/); if (mm) qty = parseInt(mm[1], 10); }
                 else if (name.indexOf('徽章') >= 0) key = '徽章';
                 if (key) add(key, qty);
             });
         }
-        // 解析 ccl1004 一行的商品文本 → {商品key: 数量}（以活动方修改为准）
+        // 解析 ccl1004 一行 → {goods: {商品key:数量}, cards: {图鉴卡key:数量}, detail: {来源明细}}（以活动方修改为准）
         function parseCclGoods(row, hdr) {
-            const g = {};
-            const add = (k, n) => { n = parseInt(n, 10); if (n > 0) g[k] = (g[k] || 0) + n; };
+            const g = { goods: {}, cards: {}, detail: {} };
+            const add = (k, n) => { n = parseInt(n, 10); if (n > 0) g.goods[k] = (g.goods[k] || 0) + n; };
+            const addCard = (name, qty) => { name = String(name || '').trim(); if (!CARD_SET.has(name)) return; qty = parseInt(qty, 10); if (qty > 0) g.cards[name] = (g.cards[name] || 0) + qty; };
+            const cardOnly = (seg) => { const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)$/.exec(String(seg || '').trim()); return m ? m[1] : null; };
             const gi = (name) => { const i = hdr.indexOf(name); return i < 0 ? '' : String(row[i] || '').trim(); };
             gi('限时小卡获得').split(/[、，,]/).forEach(s => { const m = s.match(/限时(\d+)[x×](\d+)/); if (m) add('限时小卡' + m[1], m[2]); });
             const lang = gi('浪漫疯子获得');
@@ -2987,11 +2990,17 @@ const GOODS_COLS = [
                 else if (zj.indexOf('ABC全套') >= 0) { jt = 3; }
                 else if (zj.indexOf('A/B/C随机2张') >= 0) { jt = 2; }
                 else if (zj.indexOf('A/B/C随机1张') >= 0) { jt = 1; }
-                if (jt + zz + kt > 0) { g['镜头签'] = jt * sets; g['周正'] = zz * sets; g['开推'] = kt * sets; }
+                if (jt + zz + kt > 0) { g.goods['镜头签'] = jt * sets; g.goods['周正'] = zz * sets; g.goods['开推'] = kt * sets; }
             }
-            parseManzengInto(gi('个人满赠'), g);
+            parseManzengInto(gi('个人满抽礼') || gi('个人满赠'), g.goods);
             const xc = gi('宣传集赞礼');
             if (xc && !/(未参与|审核未通过|^$|^-$)/.test(xc)) add('宣传礼', 1);
+            // 图鉴卡面四渠道累加：抽卡(获得卡片) + 宣传集赞礼 + 超like兑换卡面 + 碎卡兑换(成功兑换到的卡面)
+            gi('获得卡片').split(/[;；]/).forEach(s => { const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
+            gi('超like兑换卡面').split(/[、，,]/).forEach(s => { const c = cardOnly(s); if (c) addCard(c, 1); });
+            if (xc && !/(未参与|审核未通过|重复填写|^$|^-$)/.test(xc)) { const c = cardOnly(xc); if (c) addCard(c, 1); }
+            gi('成功兑换到的卡面').split(/[、，,]/).forEach(s => { const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
+            g.detail = { 宣传集赞礼: gi('宣传集赞礼'), 超like兑换卡面: gi('超like兑换卡面'), 成功兑换到的卡面: gi('成功兑换到的卡面'), 碎卡兑换审核状态: gi('碎卡兑换审核状态'), 超like卡: gi('超like卡'), 全员特典: gi('全员特典'), 终极活动获得: gi('终极活动获得') };
             return g;
         }
         // 读取 ccl1004 文件 → Map<下单账号, {商品key:数量}>
@@ -3013,7 +3022,7 @@ const GOODS_COLS = [
                             const acct = String(r[acctIdx] || '').trim();
                             if (!acct) return;
                             const g = parseCclGoods(r, hdr);
-                            if (Object.keys(g).length) map.set(acct, g);
+                            if (Object.keys(g.goods).length || Object.keys(g.cards).length) map.set(acct, g);
                         });
                         resolve(map);
                     } catch (err) { reject(err); }
@@ -3045,7 +3054,8 @@ const GOODS_COLS = [
                 }
                 const cardNames = sortCardNames(Object.keys(CARD_IMAGES));
                 const goodsCols = GOODS_COLS.map(g => g.name);
-                const header = ['收货人姓名', '收货人手机号', '收货地址', '总张数'].concat(cardNames, goodsCols);
+                const SRC_COLS = ['宣传集赞礼', '超like兑换卡面', '成功兑换到的卡面', '碎卡兑换审核状态', '超like卡', '全员特典', '终极活动获得'];
+                const header = ['收货人姓名', '收货人手机号', '收货地址', '总张数'].concat(cardNames, goodsCols, SRC_COLS);
                 const wb = new ExcelJS.Workbook();
                 const ws = wb.addWorksheet('发货明细');
                 ws.getRow(1).values = header;
@@ -3056,19 +3066,19 @@ const GOODS_COLS = [
                 for (let i = 0; i < cardNames.length; i++) ws.getColumn(cardStart + i).width = 18.67;
                 const goodsStart = cardStart + cardNames.length;
                 for (let i = 0; i < goodsCols.length; i++) ws.getColumn(goodsStart + i).width = 18.67;
+                const srcStart = goodsStart + goodsCols.length;
+                for (let i = 0; i < SRC_COLS.length; i++) ws.getColumn(srcStart + i).width = 20;
                 userData.forEach(u => {
-                    const cm = countUserCards(u);
+                    const cg = useCcl ? (cclGoods.get(String(u.wechat || '').trim()) || cclGoods.get(String(u.phone || '').trim())) : null;
+                    const cm = cg ? cg.cards : countUserCards(u);
                     const total = cardNames.reduce((sum, n) => sum + (cm[n] || 0), 0);
                     const row = [u.recipientName || '', u.phone || '', u.address || '', total];
                     cardNames.forEach(n => row.push(cm[n] || 0));
                     const gg = new Map();
-                    if (useCcl) {
-                        const cg = cclGoods.get(String(u.wechat || '').trim()) || cclGoods.get(String(u.phone || '').trim());
-                        if (cg) Object.entries(cg).forEach(([k, v]) => gg.set(k, v));
-                    } else {
-                        mergeUserGoods(gg, u);
-                    }
+                    if (cg) Object.entries(cg.goods).forEach(([k, v]) => gg.set(k, v));
+                    else mergeUserGoods(gg, u);
                     GOODS_COLS.forEach(g => row.push(gg.get(g.key) || 0));
+                    SRC_COLS.forEach(s => row.push(cg ? (cg.detail[s] || '') : ''));
                     ws.addRow(row);
                 });
                 // 第2行嵌图：卡面 + 商品图（裁中间卡本体，130x95 不变形）
