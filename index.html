@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 10:48</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 16:48</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -151,7 +151,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 10:48</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 16：48</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -538,6 +538,7 @@
                         <select id="exportSelect" class="btn btn-sm" style="margin-left: 5px; background: white; color: #333; border: 1px solid #ddd; cursor: pointer;" title="导出主数据各维度Excel（用户统计/卡片统计/活动期统计/满赠达标/来豹接龙查询表等）">
                             <option value="">📥 导出Excel...</option>
                             <option value="all">全部数据</option>
+                            <option value="shipping">发货表（含地址）</option>
                             <option value="user">用户统计</option>
                             <option value="card">卡片统计</option>
                             <option value="activity">活动期统计</option>
@@ -835,6 +836,7 @@
             const boxPrizeNoToPay = new Map(); // 20260924 混合判定：开奖单号 -> 盲盒支付时间
             const allOrderNosByWechat = new Map(); // 全部订单号（含无奖品普通订单），碎卡兑换订单号匹配用
             const seenOrderNos = new Set(); // 20260924 修复：同一订单号只统计一次（补邮文件重复上传导致补邮份数翻倍）
+            const wechatAddressMap = new Map(); // 下单账号 -> 收货地址（发货表用）
             const __total = df.length;
             const __BATCH = 5000;
             setAnalysisProgress(0, '准备分析数据...');
@@ -852,6 +854,12 @@
                 const wechat = row['下单账号'] || row['账号'];
                 const phone = row['收货人/提货人手机号'] || row['手机号'] || row['收货人手机号'];
                 const recipientName = row['收货人/提货人姓名'] || row['收货人姓名'] || row['收件人姓名'] || row['提货人'] || row['收件人'] || row['收货人'] || '';
+                // 提取收货地址（省/市/区/详细地址），供发货表用
+                const addrParts = [row['省'], row['市'], row['区'], row['收货/提货详细地址'] || row['收货地址'] || row['详细地址']]
+                    .filter(v => v !== undefined && v !== null && String(v).trim() && !/^[\-\/\s]*$/.test(String(v).trim()));
+                const address = addrParts.map(v => String(v).trim()).join(' ');
+                const wkAddrKey = String(wechat).trim();
+                if (wkAddrKey && address) { wechatAddressMap.set(wkAddrKey, address); }
                 // 全部订单号入账（含无奖品普通订单），保证碎卡兑换"订单号匹配账号"能命中
                 if (wechat && orderNo) {
                     const wk = String(wechat).trim();
@@ -1504,7 +1512,7 @@
                 const validOrderCount = user.orders.size; // 现在orders里只有有效订单
                 
                 userData.push({
-                    wechat: user.wechat, phone: user.phone || '', recipientName: user.recipientName || '', orderCount: validOrderCount,
+                    wechat: user.wechat, phone: user.phone || '', recipientName: user.recipientName || '', address: wechatAddressMap.get(String(user.wechat).trim()) || '', orderCount: validOrderCount,
                     orderNos: [...(allOrderNosByWechat.get(String(user.wechat).trim()) || user.orders)].join(';'), items: itemList || '无', totalDraws,
                     firstPayTime: firstPayTime ? formatDate(firstPayTime) : '',
                     full10Time: full10Time ? formatDate(full10Time) : '', earlyBirdReward,
@@ -2612,6 +2620,47 @@
             return sheet;
         }
 
+        // ==================== 发货表：每个收件人 + 全部商品 + 电话 + 地址（给代发快递用） ====================
+        function exportShippingSheet() {
+            const SHIP_STOP = /(未达标|未满10抽|未参与|审核通过|需人工|不满足|^-$|^\/$|^无$)/;
+            const headers = ['下单账号', '收货人姓名', '收货人电话', '收货地址', '全部商品'];
+            const rows = [];
+            userData.forEach(u => {
+                const goodsList = [];
+                const add = (name, qty) => {
+                    name = String(name || '').trim();
+                    if (!name || SHIP_STOP.test(name)) return;
+                    const n = parseInt(qty, 10);
+                    goodsList.push(name + '×' + (n && n > 0 ? n : 1));
+                };
+                // 结构化活动赠卡
+                if (u.limited1Count > 0) add('限时小卡1', u.limited1Count);
+                if (u.limited2Count > 0) add('限时小卡2', u.limited2Count);
+                if (u.limited3Count > 0) add('限时小卡3', u.limited3Count);
+                if (u.romanceRandomCount > 0) add('浪漫疯子随机', u.romanceRandomCount);
+                if (u.romanceUniqueCount > 0) add('浪漫疯子不重复', u.romanceUniqueCount);
+                if (u.weekendRandomCount > 0) add('周末活动随机', u.weekendRandomCount);
+                if (u.weekendUniqueCount > 0) add('周末活动不重复', u.weekendUniqueCount);
+                // 文本字段：获得卡片 / 个人满抽礼 / 终极活动
+                [u.items, u.milestoneRewards, u.finalCondition].forEach(t => {
+                    if (!t) return;
+                    String(t).split(/[；;、，,＋+]/).map(s => s.trim()).filter(Boolean).forEach(seg => {
+                        if (SHIP_STOP.test(seg)) return;
+                        let m = seg.match(/^(.*?)\s*[x×]\s*(\d+)$/);
+                        if (m) { add(m[1], m[2]); return; }
+                        m = seg.match(/^(.*?)(\d+)\s*张$/);
+                        if (m) { add(m[1], m[2]); return; }
+                        if (/^\d+$/.test(seg)) return;
+                        add(seg, 1);
+                    });
+                });
+                rows.push([u.wechat, u.recipientName || '', u.phone || '', u.address || '', goodsList.join('；')]);
+            });
+            const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+            sheet['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 34 }, { wch: 60 }];
+            return sheet;
+        }
+
         // ==================== 上传导出表：按列统计商品总数（方案A总览 + 方案B每列一sheet） ====================
         let goodsPerColResult = null; // {商品列: Map<商品名,总数>}
         // 解析"商品×数量"文本并聚合进 map（与 buildGoodsSheet 同规则，过滤状态文字）
@@ -2792,6 +2841,7 @@
                 XLSX.utils.book_append_sheet(workbook, exportActivitySheet(), '活动期统计');
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
                 XLSX.utils.book_append_sheet(workbook, buildGoodsSheet(), '商品总表');
+                XLSX.utils.book_append_sheet(workbook, exportShippingSheet(), '发货表');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_全部'));
             } else if (type === 'user') {
                 XLSX.utils.book_append_sheet(workbook, exportUserSheet(), '用户统计');
@@ -2805,6 +2855,9 @@
             } else if (type === 'milestone') {
                 XLSX.utils.book_append_sheet(workbook, exportMilestoneSheet(), '满赠达标统计');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_满赠达标'));
+            } else if (type === 'shipping') {
+                XLSX.utils.book_append_sheet(workbook, exportShippingSheet(), '发货表');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐活动数据_发货表'));
             } else if (type === 'laibao') {
                 XLSX.utils.book_append_sheet(workbook, exportLaibaoSheet(), '来豹接龙查询表');
                 // 集赞修改记录 Sheet（与「导出来豹接龙查询表」按钮口径一致；无记录时写占位行）
