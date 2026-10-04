@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 22：52</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 23：19</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 22：52</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 23：19</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -3055,14 +3055,14 @@ const GOODS_COLS = [
                 const cardNames = sortCardNames(Object.keys(CARD_IMAGES));
                 const goodsCols = GOODS_COLS.map(g => g.name);
                 const SRC_COLS = ['宣传集赞礼', '超like兑换卡面', '成功兑换到的卡面', '碎卡兑换审核状态', '超like卡', '全员特典', '终极活动获得'];
-                const header = ['收货人姓名', '收货人手机号', '收货地址', '总张数'].concat(cardNames, goodsCols, SRC_COLS);
+                const header = ['下单账号', '收货人姓名', '收货人手机号', '收货地址', '最终收件人', '最终电话', '最终地址', '总张数'].concat(cardNames, goodsCols, SRC_COLS);
                 const wb = new ExcelJS.Workbook();
                 const ws = wb.addWorksheet('发货明细');
                 ws.getRow(1).values = header;
                 ws.getRow(1).height = 22;
                 ws.getRow(2).height = 81;
-                ws.getColumn(1).width = 12; ws.getColumn(2).width = 14; ws.getColumn(3).width = 42; ws.getColumn(4).width = 8;
-                const cardStart = 4;
+                ws.getColumn(1).width = 14; ws.getColumn(2).width = 12; ws.getColumn(3).width = 14; ws.getColumn(4).width = 42; ws.getColumn(5).width = 12; ws.getColumn(6).width = 14; ws.getColumn(7).width = 42; ws.getColumn(8).width = 8;
+                const cardStart = 8;
                 for (let i = 0; i < cardNames.length; i++) ws.getColumn(cardStart + i).width = 18.67;
                 const goodsStart = cardStart + cardNames.length;
                 for (let i = 0; i < goodsCols.length; i++) ws.getColumn(goodsStart + i).width = 18.67;
@@ -3072,7 +3072,7 @@ const GOODS_COLS = [
                     const cg = useCcl ? (cclGoods.get(String(u.wechat || '').trim()) || cclGoods.get(String(u.phone || '').trim())) : null;
                     const cm = cg ? cg.cards : countUserCards(u);
                     const total = cardNames.reduce((sum, n) => sum + (cm[n] || 0), 0);
-                    const row = [u.recipientName || '', u.phone || '', u.address || '', total];
+                    const row = [u.wechat || '', u.recipientName || '', u.phone || '', u.address || '', '', '', '', total];
                     cardNames.forEach(n => row.push(cm[n] || 0));
                     const gg = new Map();
                     if (cg) Object.entries(cg.goods).forEach(([k, v]) => gg.set(k, v));
