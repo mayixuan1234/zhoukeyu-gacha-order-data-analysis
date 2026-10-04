@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 10:16</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 10:48</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -151,7 +151,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 10:16</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 10:48</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -1278,45 +1278,40 @@
                     else romanceCondition = '非首次下单:未达标';
                 }
 
-                // 周末Happy Hour活动（7.18 12:00 ~ 7.20 18:00）— 20261004按官方规则修订
-                // 普通玩家：非首次≥6抽随1张/≥10抽不重复2张；首次≥12抽随1张/≥20抽不重复2张
-                // 多抽玩家：满210抽随1张；满300抽赠不重复2张（一套）
-                // 叠加：满210/300高抽玩家，若周末期(7.18-7.20)内按活动标准抽了（首次≥12/非首次≥6），再叠加一套（不重复2张）
+                // 周末Happy Hour活动（7.18 12:00 ~ 7.20 18:00）— 20261004修订(叠加版)
+                // 活动期奖励(所有人按活动期抽数)：非首次6抽随1/10抽不重复2；首次12抽随1/20抽不重复2
+                // 多抽基础(始终给)：满210随1张；满300赠不重复2张
+                // 叠加：多抽基础 + 活动期奖励 各自独立相加（满210达标=随机1+不重复2=3张；满300达标=不重复2+不重复2=4张）
                 let weekendCondition = '';
                 let weekendCardCount = 0;
                 let weekendRandomCount = 0, weekendUniqueCount = 0;
-                // 活动期是否按标准达标（首次≥12抽/非首次≥6抽）
-                const weekendStd = user.weekendDraws > 0 && (isFirstTimeWeekend ? user.weekendDraws >= 12 : user.weekendDraws >= 6);
-                if (totalDraws >= 300) {
-                    weekendUniqueCount = 2; // 满300基础：赠不重复2张（一套）
-                    if (weekendStd) {
-                        weekendUniqueCount = 4; // 活动期达标叠加一套 → 两套
-                        weekendCondition = '高抽数玩家:满300抽赠不重复2张+活动期达标再赠一套(共4张)';
-                    } else {
-                        weekendCondition = '高抽数玩家:满300抽赠不重复2张';
-                    }
-                } else if (totalDraws >= 210) {
-                    if (weekendStd) {
-                        weekendUniqueCount = 2; // 限定期内又达标：给一套不重复2张
-                        weekendCondition = '高抽数玩家:满210抽+活动期达标赠不重复2张';
-                    } else {
-                        weekendRandomCount = 1; // 未达标：随1张
-                        weekendCondition = '高抽数玩家:满210抽随1张';
-                    }
-                } else if (user.weekendDraws > 0) {
-                    // 普通玩家
+                // --- 活动期奖励（按活动期抽数）---
+                let actRandom = 0, actUnique = 0;
+                let actLabel = '';
+                if (user.weekendDraws > 0) {
                     if (isFirstTimeWeekend) {
-                        if (user.weekendDraws >= 20) { weekendUniqueCount = 2; weekendCondition = '首次下单:20抽得两张'; }
-                        else if (user.weekendDraws >= 12) { weekendRandomCount = 1; weekendCondition = '首次下单:12抽得一张'; }
-                        else { weekendCondition = '首次下单:未达标'; }
+                        if (user.weekendDraws >= 20) { actUnique = 2; actLabel = '首次下单:20抽得两张'; }
+                        else if (user.weekendDraws >= 12) { actRandom = 1; actLabel = '首次下单:12抽得一张'; }
+                        else { actLabel = '首次下单:未达标'; }
                     } else {
-                        if (user.weekendDraws >= 10) { weekendUniqueCount = 2; weekendCondition = '非首次下单:10抽得两张'; }
-                        else if (user.weekendDraws >= 6) { weekendRandomCount = 1; weekendCondition = '非首次下单:6抽得一张'; }
-                        else { weekendCondition = '非首次下单:未达标'; }
+                        if (user.weekendDraws >= 10) { actUnique = 2; actLabel = '非首次下单:10抽得两张'; }
+                        else if (user.weekendDraws >= 6) { actRandom = 1; actLabel = '非首次下单:6抽得一张'; }
+                        else { actLabel = '非首次下单:未达标'; }
                     }
                 } else {
-                    weekendCondition = '';
+                    actLabel = '';
                 }
+                // --- 多抽基础（始终给）---
+                let baseRandom = 0, baseUnique = 0, baseLabel = '';
+                if (totalDraws >= 300) { baseUnique = 2; baseLabel = '高抽数玩家:满300抽赠不重复2张'; }
+                else if (totalDraws >= 210) { baseRandom = 1; baseLabel = '高抽数玩家:满210抽随1张'; }
+                // --- 合并 ---
+                weekendRandomCount = baseRandom + actRandom;
+                weekendUniqueCount = baseUnique + actUnique;
+                const wParts = [];
+                if (baseLabel) wParts.push(baseLabel);
+                if (actLabel) wParts.push(actLabel);
+                weekendCondition = wParts.join('+');
                 weekendCardCount = weekendRandomCount + weekendUniqueCount;
 
                 // 收官终极活动（7.25 12:00 ~ 7.31 17:17）
