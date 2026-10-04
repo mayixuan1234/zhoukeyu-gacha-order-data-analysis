@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 17:45</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 18:38</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 17：45</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 18：38</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -2866,21 +2866,39 @@ const CARD_IMAGES = {
             if (!m) { m = document.createElement('div'); m.id = 'cardBigModal'; m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;'; m.onclick = () => m.remove(); document.body.appendChild(m); }
             m.innerHTML = '<img src="' + url + '" style="max-width:92%;max-height:92%;border-radius:8px;">';
         }
-        function renderCardGallery() {
+        async function renderCardGallery() {
             const wrap = document.getElementById('cardGalleryGrid');
             if (!wrap) return;
             if (wrap.dataset.loaded) return;
             let html = '';
             Object.entries(CARD_IMAGES).forEach(([k, url]) => {
-                html += '<div style="text-align:center;"><img src="' + url + '" alt="' + k + '" onclick="openCardBig(\'' + url + '\')" loading="lazy" style="width:72px;height:100px;object-fit:cover;border-radius:6px;border:1px solid #ddd;cursor:zoom-in;"><div style="font-size:11px;color:#666;margin-top:4px;">' + k + '</div></div>';
+                html += '<div style="text-align:center;"><div style="width:88px;height:64px;overflow:hidden;border-radius:6px;border:1px solid #ddd;margin:0 auto;background:#f5f5f5;"><img data-card="' + k + '" src="" alt="' + k + '" loading="lazy" onclick="openCardBig(this.src)" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in;"></div><div style="font-size:11px;color:#666;margin-top:4px;">' + k + '</div></div>';
             });
             wrap.innerHTML = html;
+            const imgs = wrap.querySelectorAll('img');
+            for (const im of imgs) {
+                const k = im.dataset.card;
+                const dataUrl = await cropCardImage(CARD_IMAGES[k], 260);
+                if (dataUrl) im.src = dataUrl; else im.src = CARD_IMAGES[k];
+            }
             wrap.dataset.loaded = '1';
         }
-        function urlToDataUrl(url) {
-            return new Promise((res, rej) => {
+        // 从原图裁剪出中间卡本体（去四周装饰与上下文字），保持约 1.37 宽高比，高清不变形
+        function cropCardImage(url, tw) {
+            tw = tw || 480;
+            return new Promise((res) => {
                 const img = new Image(); img.crossOrigin = 'anonymous';
-                img.onload = () => { try { const c = document.createElement('canvas'); c.width = 90; c.height = 126; c.getContext('2d').drawImage(img, 0, 0, 90, 126); res(c.toDataURL('image/jpeg', 0.8)); } catch (e) { res(null); } };
+                img.onload = () => {
+                    try {
+                        const w = img.naturalWidth, h = img.naturalHeight;
+                        const sx = Math.round(w * 0.25), sy = Math.round(h * 0.31);
+                        const sw = Math.round(w * 0.52), sh = Math.round(h * 0.38);
+                        const th = Math.round(tw * sh / sw);
+                        const c = document.createElement('canvas'); c.width = tw; c.height = th;
+                        c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, tw, th);
+                        res(c.toDataURL('image/jpeg', 0.92));
+                    } catch (e) { res(null); }
+                };
                 img.onerror = () => res(null); img.src = url;
             });
         }
@@ -2891,25 +2909,31 @@ const CARD_IMAGES = {
             try {
                 const cardNames = sortCardNames(Object.keys(CARD_IMAGES));
                 const wb = new ExcelJS.Workbook();
-                // 发货明细（每行一个收件人 + 每卡列数量）
                 const ws = wb.addWorksheet('发货明细');
-                ws.columns = [{ header: '收货人姓名', width: 12 }, { header: '收货人电话', width: 14 }, { header: '收货地址', width: 42 }].concat(cardNames.map(n => ({ header: n, width: 7 })));
+                // 第1行：表头文字
+                ws.getRow(1).values = ['收货人姓名', '收货人手机号', '收货地址', '总张数'].concat(cardNames);
+                ws.getRow(1).height = 22;
+                // 第2行：卡面图片行（行高81pt = 2.86cm）
+                ws.getRow(2).height = 81;
+                // 列宽：基础列 + 卡列(18.67≈3.7cm)
+                ws.getColumn(1).width = 12; ws.getColumn(2).width = 14; ws.getColumn(3).width = 42; ws.getColumn(4).width = 8;
+                for (let i = 0; i < cardNames.length; i++) { ws.getColumn(5 + i).width = 18.67; }
+                // 数据行（从第3行起）
                 userData.forEach(u => {
                     const cm = countUserCards(u);
-                    const row = [u.recipientName || '', u.phone || '', u.address || ''];
+                    const total = cardNames.reduce((sum, n) => sum + (cm[n] || 0), 0);
+                    const row = [u.recipientName || '', u.phone || '', u.address || '', total];
                     cardNames.forEach(n => row.push(cm[n] || 0));
                     ws.addRow(row);
                 });
-                // 卡面图鉴（卡名 + 卡面图）
-                const gs = wb.addWorksheet('卡面图鉴');
-                gs.columns = [{ width: 10 }, { width: 18 }];
-                gs.getRow(1).values = ['卡名', '卡面图'];
-                let ri = 2;
-                for (const n of cardNames) {
-                    gs.getCell('A' + ri).value = n;
-                    const dataUrl = await urlToDataUrl(CARD_IMAGES[n]);
-                    if (dataUrl) { const imgId = wb.addImage({ base64: dataUrl.split(',')[1], extension: 'jpeg' }); gs.addImage(imgId, { tl: { col: 1, row: ri - 1 }, ext: { width: 72, height: 100 } }); }
-                    ri++;
+                // 第2行嵌入裁剪后的卡面图（宽3.45cm≈130px，高按比例≈95px，不变形、高清）
+                for (let i = 0; i < cardNames.length; i++) {
+                    const n = cardNames[i];
+                    const dataUrl = await cropCardImage(CARD_IMAGES[n], 480);
+                    if (dataUrl) {
+                        const imgId = wb.addImage({ base64: dataUrl.split(',')[1], extension: 'jpeg' });
+                        ws.addImage(imgId, { tl: { col: 4 + i, row: 1 }, ext: { width: 130, height: 95 } });
+                    }
                 }
                 const buffer = await wb.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -2921,6 +2945,7 @@ const CARD_IMAGES = {
                 btn.textContent = oldTxt; btn.disabled = false;
             }
         }
+
         document.getElementById('cardGalleryBtn').addEventListener('click', renderCardGallery);
         document.getElementById('shipImgExportBtn').addEventListener('click', exportShipWithImages);
 
