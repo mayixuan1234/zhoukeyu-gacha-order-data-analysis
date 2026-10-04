@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 16:48</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 17:45</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -151,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 16：48</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 17：45</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -190,6 +191,30 @@
             <button class="btn" id="goodsExportBtn" style="display:none;">📥 导出按列商品统计Excel</button>
             <div id="goodsStatResult" style="margin-top:12px;font-size:13px;color:#333;"></div>
         </div>
+
+        <div class="upload-section">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <h3 style="margin:0;">📦 合并发货表（上传 ccl1004 基准表）</h3>
+                <span style="font-size:12px;color:#999;">先上传并分析订单数据（se1），再上传活动方修改好的 ccl1004，按下单账号匹配收货信息生成发货表</span>
+            </div>
+            <input type="file" id="shipMergeInput" accept=".xlsx,.xls,.csv">
+            <button class="btn" id="shipMergeBtn">生成合并发货表</button>
+            <div id="shipMergeResult" style="margin-top:12px;font-size:13px;color:#333;"></div>
+        </div>
+
+        <div class="upload-section">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <h3 style="margin:0;">🖼️ 卡面图鉴（R1 / SR1 / SSR1…卡面图）</h3>
+                <span style="font-size:12px;color:#999;">加载全部卡面图，可点击放大；也可一键导出发货明细带图 Excel</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn" id="cardGalleryBtn">加载图鉴</button>
+                <button class="btn" id="shipImgExportBtn">📥 导出发货明细带图 Excel</button>
+            </div>
+            <div id="cardGalleryGrid" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;"></div>
+        </div>
+
+
 
 <div class="upload-section">
             <div class="upload-box" id="suikaUploadBox">
@@ -2660,6 +2685,250 @@
             sheet['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 34 }, { wch: 60 }];
             return sheet;
         }
+
+        // ==================== 合并发货表：上传 ccl1004 基准表 + 已分析订单（含地址）按下单账号生成发货表 ====================
+        const SHIP_GOODS_KEYS = ['限时小卡获得','浪漫疯子获得','周末活动获得','终极活动获得','获得卡片','个人满赠','超like卡','全员特典','超like兑换卡面','宣传集赞礼','成功兑换到的卡面','用于兑换的卡'];
+        function isShipStatus(v) {
+            const s = String(v || '').trim();
+            if (!s) return true;
+            if (s === '-' || s === '/' || s === '无') return true;
+            return /(未参与|未达标|未满10抽|未购买|无需补邮|不满足|审核通过|需人工)/.test(s);
+        }
+        function handleShipMerge(file) {
+            if (!userData || userData.length === 0) {
+                alert('请先在上方上传订单数据（se1）并点击"开始分析"，再上传 ccl1004 基准表生成发货表');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                    if (!rows || rows.length < 2) { alert('ccl1004 表格为空或行数不足'); return; }
+                    const hdr = rows[0].map(h => String(h || '').trim());
+                    // 用户匹配表（按下单账号 + 手机号）
+                    const userByAcct = new Map();
+                    userData.forEach(u => {
+                        const wk = String(u.wechat || '').trim();
+                        if (wk) userByAcct.set(wk, u);
+                        const ph = String(u.phone || '').trim();
+                        if (ph) userByAcct.set(ph, u);
+                    });
+                    // ccl1004 商品列
+                    const goodsIdx = [];
+                    hdr.forEach((h, i) => { if (h && SHIP_GOODS_KEYS.some(k => h.includes(k))) goodsIdx.push(i); });
+                    // 下单账号列：优先"下单账号"，其次"查询码"
+                    let acctIdx = hdr.findIndex(h => h === '下单账号');
+                    if (acctIdx < 0) acctIdx = hdr.findIndex(h => h.includes('下单账号'));
+                    if (acctIdx < 0) acctIdx = 0;
+                    const out = [['下单账号', '收货人姓名', '收货人电话', '收货地址', '全部商品']];
+                    let matched = 0, unmatched = 0;
+                    rows.slice(1).forEach(r => {
+                        const acct = String(r[acctIdx] || '').trim();
+                        if (!acct) return;
+                        const u = userByAcct.get(acct);
+                        const goods = goodsIdx.map(i => String(r[i] || '').trim()).filter(t => t && !isShipStatus(t)).join('；');
+                        if (u) {
+                            out.push([acct, u.recipientName || '', u.phone || '', u.address || '', goods]);
+                            matched++;
+                        } else {
+                            out.push([acct, '', '', '【未匹配】', goods]);
+                            unmatched++;
+                        }
+                    });
+                    const wb2 = XLSX.utils.book_new();
+                    const ws2 = XLSX.utils.aoa_to_sheet(out);
+                    ws2['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 42 }, { wch: 70 }];
+                    XLSX.utils.book_append_sheet(wb2, ws2, '发货表');
+                    XLSX.writeFile(wb2, getTimestampFilename('合并发货表_ccl1004'));
+                    document.getElementById('shipMergeResult').innerHTML =
+                        '✅ 已生成发货表：共 <b>' + (out.length - 1) + '</b> 行，匹配到收货信息 <b>' + matched + '</b> 行，未匹配 <b>' + unmatched + '</b> 行';
+                } catch (err) {
+                    alert('生成失败：' + (err && err.message ? err.message : err));
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        document.getElementById('shipMergeInput').addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) document.getElementById('shipMergeBtn').click();
+        });
+
+        // ==================== 卡面图鉴：网页显示 + 导出发货明细带图 Excel ====================
+const CARD_IMAGES = {
+    'R1': 'https://si.geilicdn.com/wdseller902056251807-07a10000019f46ab5d5f0a23138d_2560_2560.jpg',
+    'R10': 'https://si.geilicdn.com/wdseller902056251807-3dbc0000019f46b148a30a23c286_2560_2560.jpg',
+    'R11': 'https://si.geilicdn.com/wdseller902056251807-7b3f0000019f46b1a1520a230417_2560_2560.jpg',
+    'R12': 'https://si.geilicdn.com/wdseller902056251807-4eab0000019f46b2d5290a210247_2560_2560.jpg',
+    'R13': 'https://si.geilicdn.com/wdseller902056251807-7b430000019f46b1f6c80a230417_2560_2560.jpg',
+    'R14': 'https://si.geilicdn.com/wdseller902056251807-39050000019f46b332210a2301af_2560_2560.jpg',
+    'R15': 'https://si.geilicdn.com/wdseller902056251807-311b0000019f46b383bd0a2303ea_2560_2560.jpg',
+    'R16': 'https://si.geilicdn.com/wdseller902056251807-2bcd0000019f46b3e2520a23010f_2560_2560.jpg',
+    'R17': 'https://si.geilicdn.com/wdseller902056251807-311e0000019f46b44dcc0a2303ea_2560_2560.jpg',
+    'R18': 'https://si.geilicdn.com/wdseller902056251807-320d0000019f46b49cf80a2102b1_2560_2560.jpg',
+    'R19': 'https://si.geilicdn.com/wdseller902056251807-35ad0000019f46b52a570a2302e6_2560_2560.jpg',
+    'R2': 'https://si.geilicdn.com/wdseller902056251807-4e950000019f46abd9680a210247_2560_2560.jpg',
+    'R20': 'https://si.geilicdn.com/wdseller902056251807-5caf0000019f46b5d5d90a23b6ac_2560_2560.jpg',
+    'R21': 'https://si.geilicdn.com/wdseller902056251807-01f70000019f46b62cac0a23c1e0_2560_2560.jpg',
+    'R22': 'https://si.geilicdn.com/wdseller902056251807-07cf0000019f46b787960a23138d_2560_2560.jpg',
+    'R23': 'https://si.geilicdn.com/wdseller902056251807-2bd80000019f46b7daa60a23010f_2560_2560.jpg',
+    'R24': 'https://si.geilicdn.com/wdseller902056251807-01fd0000019f46b888a80a23c1e0_2560_2560.jpg',
+    'R25': 'https://si.geilicdn.com/wdseller902056251807-7b590000019f46bb646d0a230417_2560_2560.jpg',
+    'R26': 'https://si.geilicdn.com/wdseller902056251807-56bf0000019f46bbb4a20a2301f1_2560_2560.jpg',
+    'R27': 'https://si.geilicdn.com/wdseller902056251807-2aeb0000019f46bbfdd40a2304a0_2560_2560.jpg',
+    'R28': 'https://si.geilicdn.com/wdseller902056251807-02090000019f46bc731b0a23c1e0_2560_2560.jpg',
+    'R29': 'https://si.geilicdn.com/wdseller902056251807-39380000019f46bda5590a22d58f_2560_2560.jpg',
+    'R3': 'https://si.geilicdn.com/wdseller902056251807-5cc20000019f46ad9b970a23b4f4_2560_2560.jpg',
+    'R30': 'https://si.geilicdn.com/wdseller902056251807-35c00000019f46bd2a3d0a2302e6_2560_2560.jpg',
+    'R31': 'https://si.geilicdn.com/wdseller902056251807-56cb0000019f46beb5f80a2301f1_2560_2560.jpg',
+    'R32': 'https://si.geilicdn.com/wdseller902056251807-37f70000019f472ae0510a240147_2560_2560.jpg',
+    'R33': 'https://si.geilicdn.com/wdseller902056251807-59d00000019f46bf1c6f0a23c191_2560_2560.jpg',
+    'R34': 'https://si.geilicdn.com/wdseller902056251807-35790000019f47278d620a23b54f_2560_2560.jpg',
+    'R35': 'https://si.geilicdn.com/wdseller902056251807-5e460000019f472814e70a23b6ac_2560_2560.jpg',
+    'R36': 'https://si.geilicdn.com/wdseller902056251807-357f0000019f4728de010a23b54f_2560_2560.jpg',
+    'R37': 'https://si.geilicdn.com/wdseller902056251807-5e860000019f472996750a23b5fa_2560_2560.jpg',
+    'R38': 'https://si.geilicdn.com/wdseller902056251807-586d0000019f472a0f7d0a2301f1_2560_2560.jpg',
+    'R39': 'https://si.geilicdn.com/wdseller902056251807-39f10000019f472c40dd0a230449_2560_2560.jpg',
+    'R4': 'https://si.geilicdn.com/wdseller902056251807-31090000019f46aee9d20a2303ea_2560_2560.jpg',
+    'R40': 'https://si.geilicdn.com/wdseller902056251807-7cdd0000019f472f89ed0a230417_2560_2560.jpg',
+    'R41': 'https://si.geilicdn.com/wdseller902056251807-7cd60000019f472d964a0a230417_2560_2560.jpg',
+    'R42': 'https://si.geilicdn.com/wdseller902056251807-39fd0000019f47303a450a230449_2560_2560.jpg',
+    'R43': 'https://si.geilicdn.com/wdseller902056251807-3a5e0000019f4730b0180a2305d8_2560_2560.jpg',
+    'R44': 'https://si.geilicdn.com/wdseller902056251807-50590000019f473148380a210247_2560_2560.jpg',
+    'R45': 'https://si.geilicdn.com/wdseller902056251807-5e770000019f4731cc2b0a23b4f4_2560_2560.jpg',
+    'R46': 'https://si.geilicdn.com/wdseller902056251807-2d860000019f473247ac0a23010f_2560_2560.jpg',
+    'R47': 'https://si.geilicdn.com/wdseller902056251807-3af50000019f47389af10a2301af_2560_2560.jpg',
+    'R48': 'https://si.geilicdn.com/wdseller902056251807-2cab0000019f4738f9e20a2304a0_2560_2560.jpg',
+    'R49': 'https://si.geilicdn.com/wdseller902056251807-5e720000019f47397d3b0a23b6ac_2560_2560.jpg',
+    'R5': 'https://si.geilicdn.com/wdseller902056251807-5cc80000019f46af52a10a23b4f4_2560_2560.jpg',
+    'R50': 'https://si.geilicdn.com/wdseller902056251807-5e8f0000019f473a04650a23b4f4_2560_2560.jpg',
+    'R51': 'https://si.geilicdn.com/wdseller902056251807-35ad0000019f473a63950a23b54f_2560_2560.jpg',
+    'R6': 'https://si.geilicdn.com/wdseller902056251807-38270000019f46af96050a230449_2560_2560.jpg',
+    'R7': 'https://si.geilicdn.com/wdseller902056251807-36320000019f46b015880a240147_2560_2560.jpg',
+    'R8': 'https://si.geilicdn.com/wdseller902056251807-5c9d0000019f46b071140a23b6ac_2560_2560.jpg',
+    'R9': 'https://si.geilicdn.com/wdseller902056251807-569e0000019f46b0b75c0a2301f1_2560_2560.jpg',
+    'SR1': 'https://si.geilicdn.com/wdseller902056251807-331c0000019f473d24500a2303ea_2560_2560.jpg',
+    'SR10': 'https://si.geilicdn.com/wdseller902056251807-3b020000019f4740c7bc0a22d58f_2560_2560.jpg',
+    'SR11': 'https://si.geilicdn.com/wdseller902056251807-2cc30000019f4742251a0a2304a0_2560_2560.jpg',
+    'SR12': 'https://si.geilicdn.com/wdseller902056251807-5b860000019f47427de50a23c191_2560_2560.jpg',
+    'SR13': 'https://si.geilicdn.com/wdseller902056251807-5ed10000019f4743116d0a23b5fa_2560_2560.jpg',
+    'SR14': 'https://si.geilicdn.com/wdseller902056251807-5b870000019f474387f10a23c191_2560_2560.jpg',
+    'SR15': 'https://si.geilicdn.com/wdseller902056251807-3b080000019f4743dd2a0a22d58f_2560_2560.jpg',
+    'SR16': 'https://si.geilicdn.com/wdseller902056251807-3a930000019f47445f310a2305d8_2560_2560.jpg',
+    'SR17': 'https://si.geilicdn.com/wdseller902056251807-38320000019f4744d7f10a240147_2560_2560.jpg',
+    'SR18': 'https://si.geilicdn.com/wdseller902056251807-332b0000019f47452a320a2303ea_2560_2560.jpg',
+    'SR19': 'https://si.geilicdn.com/wdseller902056251807-7d150000019f474627da0a230417_2560_2560.jpg',
+    'SR2': 'https://si.geilicdn.com/wdseller902056251807-3f900000019f473dc3a40a23c286_2560_2560.jpg',
+    'SR20': 'https://si.geilicdn.com/wdseller902056251807-09ca0000019f474691280a23138d_2560_2560.jpg',
+    'SR21': 'https://si.geilicdn.com/wdseller902056251807-5ed90000019f474705cb0a23b5fa_2560_2560.jpg',
+    'SR22': 'https://si.geilicdn.com/wdseller902056251807-3a9f0000019f474760220a2305d8_2560_2560.jpg',
+    'SR23': 'https://si.geilicdn.com/wdseller902056251807-508d0000019f4747df310a210247_2560_2560.jpg',
+    'SR24': 'https://si.geilicdn.com/wdseller902056251807-37af0000019f4748450a0a2302e6_2560_2560.jpg',
+    'SR25': 'https://si.geilicdn.com/wdseller902056251807-3b130000019f4748aa880a22d58f_2560_2560.jpg',
+    'SR26': 'https://si.geilicdn.com/wdseller902056251807-58b50000019f47491c360a2301f1_2560_2560.jpg',
+    'SR27': 'https://si.geilicdn.com/wdseller902056251807-7d220000019f4749858c0a230417_2560_2560.jpg',
+    'SR3': 'https://si.geilicdn.com/wdseller902056251807-3f950000019f473e63b10a23c286_2560_2560.jpg',
+    'SR4': 'https://si.geilicdn.com/wdseller902056251807-38230000019f473ebb710a240147_2560_2560.jpg',
+    'SR5': 'https://si.geilicdn.com/wdseller902056251807-5e9b0000019f473f49540a23b4f4_2560_2560.jpg',
+    'SR6': 'https://si.geilicdn.com/wdseller902056251807-5e9d0000019f473f9c2d0a23b4f4_2560_2560.jpg',
+    'SR7': 'https://si.geilicdn.com/wdseller902056251807-3a210000019f473ffc0f0a230449_2560_2560.jpg',
+    'SR8': 'https://si.geilicdn.com/wdseller902056251807-33230000019f474050ed0a2303ea_2560_2560.jpg',
+    'SR9': 'https://si.geilicdn.com/wdseller902056251807-3b050000019f4741b99a0a22d58f_2560_2560.jpg',
+    'SSR1': 'https://si.geilicdn.com/wdseller902056251807-09e20000019f475125c20a23138d_2560_2560.jpg',
+    'SSR2': 'https://si.geilicdn.com/wdseller902056251807-3a4a0000019f47517e6c0a230449_2560_2560.jpg',
+    'SSR3': 'https://si.geilicdn.com/wdseller902056251807-3b2f0000019f4751cebc0a22d58f_2560_2560.jpg',
+    'SSR4': 'https://si.geilicdn.com/wdseller902056251807-33560000019f47522a7b0a2303ea_2560_2560.jpg',
+    'SSR5': 'https://si.geilicdn.com/wdseller902056251807-2ce80000019f47527ddd0a2304a0_2560_2560.jpg',
+    'SSR6': 'https://si.geilicdn.com/wdseller902056251807-50ad0000019f4752e38a0a210247_2560_2560.jpg',
+    'SSR7': 'https://si.geilicdn.com/wdseller902056251807-58d20000019f4753445e0a2301f1_2560_2560.jpg',
+    'SSR8': 'https://si.geilicdn.com/wdseller902056251807-5bb30000019f475392c40a23c191_2560_2560.jpg',
+    'SSSR1': 'https://si.geilicdn.com/wdseller902056251807-335e0000019f475497e40a2303ea_2560_2560.jpg',
+    'SSSR2': 'https://si.geilicdn.com/wdseller902056251807-3b440000019f475534860a2301af_2560_2560.jpg',
+};
+        function countUserCards(u) {
+            const map = {};
+            const STOP = /(未达标|未满10抽|未参与|审核通过|需人工|不满足|^-$|^\/$|^无$)/;
+            const add = (name, qty) => { name = String(name || '').trim(); if (!name) return; const n = parseInt(qty, 10); map[name] = (map[name] || 0) + (n && n > 0 ? n : 1); };
+            const parse = (text) => { if (!text) return; String(text).split(/[；;、，,＋+]/).map(s => s.trim()).filter(Boolean).forEach(seg => { if (STOP.test(seg)) return; let m = seg.match(/^(.*?)\s*[x×]\s*(\d+)$/); if (m) { add(m[1], m[2]); return; } m = seg.match(/^(.*?)(\d+)\s*张$/); if (m) { add(m[1], m[2]); return; } if (/^\d+$/.test(seg)) return; add(seg, 1); }); };
+            [u.items, u.milestoneRewards, u.finalCondition].forEach(parse);
+            return map;
+        }
+        function sortCardNames(names) {
+            const o = { R: 0, SR: 1, SSR: 2, SSSR: 3 };
+            return names.sort((a, b) => {
+                const pa = /^(SSSR|SSR|SR|R)(\d+)$/.exec(a), pb = /^(SSSR|SSR|SR|R)(\d+)$/.exec(b);
+                if (pa && pb) { if (o[pa[1]] !== o[pb[1]]) return o[pa[1]] - o[pb[1]]; return parseInt(pa[2]) - parseInt(pb[2]); }
+                return a.localeCompare(b);
+            });
+        }
+        function openCardBig(url) {
+            let m = document.getElementById('cardBigModal');
+            if (!m) { m = document.createElement('div'); m.id = 'cardBigModal'; m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;'; m.onclick = () => m.remove(); document.body.appendChild(m); }
+            m.innerHTML = '<img src="' + url + '" style="max-width:92%;max-height:92%;border-radius:8px;">';
+        }
+        function renderCardGallery() {
+            const wrap = document.getElementById('cardGalleryGrid');
+            if (!wrap) return;
+            if (wrap.dataset.loaded) return;
+            let html = '';
+            Object.entries(CARD_IMAGES).forEach(([k, url]) => {
+                html += '<div style="text-align:center;"><img src="' + url + '" alt="' + k + '" onclick="openCardBig(\'' + url + '\')" loading="lazy" style="width:72px;height:100px;object-fit:cover;border-radius:6px;border:1px solid #ddd;cursor:zoom-in;"><div style="font-size:11px;color:#666;margin-top:4px;">' + k + '</div></div>';
+            });
+            wrap.innerHTML = html;
+            wrap.dataset.loaded = '1';
+        }
+        function urlToDataUrl(url) {
+            return new Promise((res, rej) => {
+                const img = new Image(); img.crossOrigin = 'anonymous';
+                img.onload = () => { try { const c = document.createElement('canvas'); c.width = 90; c.height = 126; c.getContext('2d').drawImage(img, 0, 0, 90, 126); res(c.toDataURL('image/jpeg', 0.8)); } catch (e) { res(null); } };
+                img.onerror = () => res(null); img.src = url;
+            });
+        }
+        async function exportShipWithImages() {
+            if (!userData || userData.length === 0) { alert('请先在上方上传订单数据（se1）并点击"开始分析"'); return; }
+            if (typeof ExcelJS === 'undefined') { alert('ExcelJS 未加载，请联网后重试'); return; }
+            const btn = document.getElementById('shipImgExportBtn'); const oldTxt = btn.textContent; btn.textContent = '⏳ 正在生成…（含图，需稍等）'; btn.disabled = true;
+            try {
+                const cardNames = sortCardNames(Object.keys(CARD_IMAGES));
+                const wb = new ExcelJS.Workbook();
+                // 发货明细（每行一个收件人 + 每卡列数量）
+                const ws = wb.addWorksheet('发货明细');
+                ws.columns = [{ header: '收货人姓名', width: 12 }, { header: '收货人电话', width: 14 }, { header: '收货地址', width: 42 }].concat(cardNames.map(n => ({ header: n, width: 7 })));
+                userData.forEach(u => {
+                    const cm = countUserCards(u);
+                    const row = [u.recipientName || '', u.phone || '', u.address || ''];
+                    cardNames.forEach(n => row.push(cm[n] || 0));
+                    ws.addRow(row);
+                });
+                // 卡面图鉴（卡名 + 卡面图）
+                const gs = wb.addWorksheet('卡面图鉴');
+                gs.columns = [{ width: 10 }, { width: 18 }];
+                gs.getRow(1).values = ['卡名', '卡面图'];
+                let ri = 2;
+                for (const n of cardNames) {
+                    gs.getCell('A' + ri).value = n;
+                    const dataUrl = await urlToDataUrl(CARD_IMAGES[n]);
+                    if (dataUrl) { const imgId = wb.addImage({ base64: dataUrl.split(',')[1], extension: 'jpeg' }); gs.addImage(imgId, { tl: { col: 1, row: ri - 1 }, ext: { width: 72, height: 100 } }); }
+                    ri++;
+                }
+                const buffer = await wb.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = getTimestampFilename('发货明细带图'); a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+            } catch (err) {
+                alert('导出失败：' + (err && err.message ? err.message : err));
+            } finally {
+                btn.textContent = oldTxt; btn.disabled = false;
+            }
+        }
+        document.getElementById('cardGalleryBtn').addEventListener('click', renderCardGallery);
+        document.getElementById('shipImgExportBtn').addEventListener('click', exportShipWithImages);
+
+        document.getElementById('shipMergeBtn').addEventListener('click', () => {
+            const f = document.getElementById('shipMergeInput').files[0];
+            if (!f) { alert('请先选择 ccl1004 基准表文件'); return; }
+            handleShipMerge(f);
+        });
 
         // ==================== 上传导出表：按列统计商品总数（方案A总览 + 方案B每列一sheet） ====================
         let goodsPerColResult = null; // {商品列: Map<商品名,总数>}
