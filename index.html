@@ -180,7 +180,18 @@
             <div id="fileList" style="margin-top: 15px; color: #666;"></div>
         </div>
 
-        <div class="upload-section">
+                <div class="upload-section">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <h3 style="margin:0;">📊 上传导出表 · 按列统计商品总数</h3>
+                <span style="font-size:12px;color:#999;">上传导出的来豹/查询表.xlsx，自动识别商品列，逐列统计每个商品总张数（下大货用）</span>
+            </div>
+            <input type="file" id="goodsUploadInput" accept=".xlsx,.xls,.csv">
+            <button class="btn" id="goodsStatBtn">统计商品</button>
+            <button class="btn" id="goodsExportBtn" style="display:none;">📥 导出按列商品统计Excel</button>
+            <div id="goodsStatResult" style="margin-top:12px;font-size:13px;color:#333;"></div>
+        </div>
+
+<div class="upload-section">
             <div class="upload-box" id="suikaUploadBox">
                 <div>📁</div>
                 <h3>上传碎卡兑换表</h3>
@@ -532,6 +543,7 @@
                             <option value="activity">活动期统计</option>
                             <option value="milestone">满赠达标统计</option>
                             <option value="laibao">来豹接龙查询表（含集赞修改记录）</option>
+                            <option value="goods">商品总表（下大货用）</option>
                         </select>
                     </div>
                 </div>
@@ -1513,7 +1525,7 @@
                 });
             });
 
-            userData.sort((a, b) => b.totalDraws - a.totalDraws);
+            userData.sort((a, b) => (b.totalDraws - a.totalDraws) || String(a.wechat || '').localeCompare(String(b.wechat || ''), 'zh'));
             setAnalysisProgress(75, '正在生成用户统计与卡片统计...');
 
             const cardCountMap = new Map();
@@ -2536,6 +2548,171 @@
             return sheet;
         }
 
+        // ==================== 商品总表（下大货用）：聚合所有发放商品（抽到的卡+活动赠卡+满赠+碎卡兑换成功卡面），过滤状态文字 ====================
+        function buildGoodsSheet() {
+            const GOODS_STOP = /(未达标|未满10抽|未参与|审核通过|需人工|不满足|^-$|^\/$|^无$)/;
+            const goodsMap = new Map(); // 商品名 -> 总张数
+            const addG = (name, qty) => {
+                name = String(name || '').trim();
+                if (!name || GOODS_STOP.test(name)) return;
+                qty = parseInt(qty, 10);
+                if (!qty || qty < 1) qty = 1;
+                goodsMap.set(name, (goodsMap.get(name) || 0) + qty);
+            };
+            // 解析"商品×数量"文本（分隔符：；;、，,＋+；无数量段按1张）
+            const parseGoods = (text) => {
+                if (!text) return;
+                const segs = String(text).split(/[；;、，,＋+]/).map(s => s.trim()).filter(Boolean);
+                segs.forEach(seg => {
+                    if (GOODS_STOP.test(seg)) return;
+                    let m = seg.match(/^(.*?)\s*[x×]\s*(\d+)$/);
+                    if (m) { addG(m[1], parseInt(m[2], 10)); return; }
+                    m = seg.match(/^(.*?)(\d+)\s*张$/);
+                    if (m) { addG(m[1], parseInt(m[2], 10)); return; }
+                    // 兜底：纯数字段（如"全套+2"里的"2"）不是商品名，跳过
+                    if (/^\d+$/.test(seg)) return;
+                    addG(seg, 1);
+                });
+            };
+            userData.forEach(u => {
+                // 活动赠卡（结构化字段）
+                if (u.limited1Count > 0) addG('限时小卡1', u.limited1Count);
+                if (u.limited2Count > 0) addG('限时小卡2', u.limited2Count);
+                if (u.limited3Count > 0) addG('限时小卡3', u.limited3Count);
+                if (u.romanceRandomCount > 0) addG('浪漫疯子随机', u.romanceRandomCount);
+                if (u.romanceUniqueCount > 0) addG('浪漫疯子不重复', u.romanceUniqueCount);
+                if (u.weekendRandomCount > 0) addG('周末活动随机', u.weekendRandomCount);
+                if (u.weekendUniqueCount > 0) addG('周末活动不重复', u.weekendUniqueCount);
+                // 抽到的卡 / 个人满抽礼 / 终极活动（文本解析）
+                parseGoods(u.items);            // 获得卡片（R1x9 等）
+                parseGoods(u.milestoneRewards); // 个人满抽礼（长大小卡×1 + 贴纸等）
+                parseGoods(u.finalCondition);   // 终极活动描述
+            });
+            // 碎卡兑换成功卡面（结构化：聚合审核通过的换入卡面）
+            (suikaSubmissions || []).forEach(s => {
+                const sAudit = s.audit || {};
+                const sPass = sAudit.pass === true || sAudit.status === '通过' || sAudit.type === '通过';
+                (s.requests || []).forEach(r => {
+                    const ra = r.audit || {};
+                    let rPass = ra.type === '通过' || ra.pass === true || ra.status === '通过';
+                    if (!rPass && ra.type === undefined && ra.pass === undefined && ra.status === undefined && sPass) rPass = true;
+                    if (!rPass) return;
+                    const card = String(ra.inCard || r.inCard || '').trim();
+                    if (!card) return;
+                    const qty = parseInt(ra.inQty || r.inQty || '1', 10);
+                    addG(card, (isNaN(qty) || qty < 1) ? 1 : qty);
+                });
+            });
+            // 排序：数量降序
+            const rows = Array.from(goodsMap.entries()).sort((a, b) => b[1] - a[1])
+                .map(([name, count]) => [name, count]);
+            const headers = ['商品名', '总张数'];
+            const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+            sheet['!cols'] = [{ wch: 40 }, { wch: 12 }];
+            return sheet;
+        }
+
+        // ==================== 上传导出表：按列统计商品总数（方案A总览 + 方案B每列一sheet） ====================
+        let goodsPerColResult = null; // {商品列: Map<商品名,总数>}
+        // 解析"商品×数量"文本并聚合进 map（与 buildGoodsSheet 同规则，过滤状态文字）
+        function parseGoodsTextInto(text, map) {
+            if (!text) return;
+            const GOODS_STOP = /(未达标|未满10抽|未参与|审核通过|需人工|不满足|^-$|^\/$|^无$)/;
+            const add = (name, qty) => {
+                name = String(name || '').trim();
+                if (!name || GOODS_STOP.test(name)) return;
+                qty = parseInt(qty, 10);
+                if (!qty || qty < 1) qty = 1;
+                map.set(name, (map.get(name) || 0) + qty);
+            };
+            const segs = String(text).split(/[；;、，,＋+]/).map(s => s.trim()).filter(Boolean);
+            segs.forEach(seg => {
+                if (GOODS_STOP.test(seg)) return;
+                let m = seg.match(/^(.*?)\s*[x×]\s*(\d+)$/);
+                if (m) { add(m[1], parseInt(m[2], 10)); return; }
+                m = seg.match(/^(.*?)(\d+)\s*张$/);
+                if (m) { add(m[1], parseInt(m[2], 10)); return; }
+                if (/^\d+$/.test(seg)) return;
+                add(seg, 1);
+            });
+        }
+        function handleGoodsUpload(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                    if (!rows || rows.length < 2) { alert('表格为空或行数不足'); return; }
+                    const header = rows[0].map(h => String(h || '').trim());
+                    const mapping = {
+                        '获得卡片': '获得卡片',
+                        '限时小卡获得': '限时小卡',
+                        '浪漫疯子获得': '浪漫疯子',
+                        '周末活动获得': '周末活动',
+                        '终极活动获得': '终极活动',
+                        '个人满赠': '个人满赠',
+                        '个人满抽礼': '个人满赠',
+                        '成功兑换到的卡面': '碎卡兑换卡面',
+                        '用于兑换的卡': '用于兑换的卡'
+                    };
+                    const goodsCols = {};
+                    header.forEach((h, i) => { if (mapping[h] !== undefined) goodsCols[mapping[h]] = i; });
+                    if (Object.keys(goodsCols).length === 0) {
+                        alert('未识别到商品列（需含 获得卡片/限时小卡获得/浪漫疯子获得/周末活动获得/终极活动获得/个人满赠/成功兑换到的卡面/用于兑换的卡 等列）');
+                        return;
+                    }
+                    const result = {};
+                    for (const [label, ci] of Object.entries(goodsCols)) {
+                        const map = new Map();
+                        rows.slice(1).forEach(r => parseGoodsTextInto(r[ci], map));
+                        result[label] = map;
+                    }
+                    goodsPerColResult = result;
+                    let html = '✅ 已识别商品列：' + Object.keys(result).join('、') + '<br>';
+                    Object.entries(result).forEach(([col, map]) => {
+                        const total = Array.from(map.values()).reduce((a, b) => a + b, 0);
+                        html += '· <b>' + col + '</b>：' + map.size + '种商品，共 <b>' + total + '</b> 张<br>';
+                    });
+                    document.getElementById('goodsStatResult').innerHTML = html;
+                    document.getElementById('goodsExportBtn').style.display = '';
+                } catch (err) {
+                    alert('解析失败：' + (err && err.message ? err.message : err));
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        function buildGoodsPerColWorkbook() {
+            const wb = XLSX.utils.book_new();
+            const overview = [['商品列', '商品名', '总张数']];
+            const colRows = {};
+            for (const [col, map] of Object.entries(goodsPerColResult)) {
+                const rows = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).map(([n, c]) => [n, c]);
+                colRows[col] = rows;
+                rows.forEach(r => overview.push([col, r[0], r[1]]));
+            }
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(overview), '商品总览');
+            Object.entries(colRows).forEach(([col, rows]) => {
+                const ws = XLSX.utils.aoa_to_sheet([['商品名', '总张数'], ...rows]);
+                ws['!cols'] = [{ wch: 40 }, { wch: 12 }];
+                XLSX.utils.book_append_sheet(wb, ws, col);
+            });
+            return wb;
+        }
+        // 事件绑定
+        document.getElementById('goodsUploadInput').addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) document.getElementById('goodsStatBtn').click();
+        });
+        document.getElementById('goodsStatBtn').addEventListener('click', () => {
+            const f = document.getElementById('goodsUploadInput').files[0];
+            if (!f) { alert('请先选择导出表文件'); return; }
+            handleGoodsUpload(f);
+        });
+        document.getElementById('goodsExportBtn').addEventListener('click', () => {
+            if (!goodsPerColResult) { alert('请先统计'); return; }
+            XLSX.writeFile(buildGoodsPerColWorkbook(), getTimestampFilename('按列商品统计'));
+        });
+
         // 独立导出来豹接龙查询表（与集赞导入结果整合导出的 sheet 同源，单独一个文件）
         async function exportLaibaoOnly() {
             if (!userData || userData.length === 0) { alert('请先上传主订单数据并点击「开始分析」后再导出来豹接龙查询表'); return; }
@@ -2635,6 +2812,9 @@
                 wsJizanLog['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 20 }];
                 XLSX.utils.book_append_sheet(workbook, wsJizanLog, '集赞修改记录');
                 XLSX.writeFile(workbook, getTimestampFilename('抽抽乐_来豹接龙查询表'));
+            } else if (type === 'goods') {
+                XLSX.utils.book_append_sheet(workbook, buildGoodsSheet(), '商品总表');
+                XLSX.writeFile(workbook, getTimestampFilename('抽抽乐_商品总表_下大货'));
             }
         }
 
