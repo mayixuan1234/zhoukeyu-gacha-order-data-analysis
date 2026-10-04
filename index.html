@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 22：14</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 22：52</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 22：14</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 22：52</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -2996,10 +2996,10 @@ const GOODS_COLS = [
             const xc = gi('宣传集赞礼');
             if (xc && !/(未参与|审核未通过|^$|^-$)/.test(xc)) add('宣传礼', 1);
             // 图鉴卡面四渠道累加：抽卡(获得卡片) + 宣传集赞礼 + 超like兑换卡面 + 碎卡兑换(成功兑换到的卡面)
-            gi('获得卡片').split(/[;；]/).forEach(s => { const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
+            gi('获得卡片').split(/[;；]/).forEach(s => { s = s.trim(); const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
             gi('超like兑换卡面').split(/[、，,]/).forEach(s => { const c = cardOnly(s); if (c) addCard(c, 1); });
             if (xc && !/(未参与|审核未通过|重复填写|^$|^-$)/.test(xc)) { const c = cardOnly(xc); if (c) addCard(c, 1); }
-            gi('成功兑换到的卡面').split(/[、，,]/).forEach(s => { const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
+            gi('成功兑换到的卡面').split(/[、，,]/).forEach(s => { s = s.trim(); const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
             g.detail = { 宣传集赞礼: gi('宣传集赞礼'), 超like兑换卡面: gi('超like兑换卡面'), 成功兑换到的卡面: gi('成功兑换到的卡面'), 碎卡兑换审核状态: gi('碎卡兑换审核状态'), 超like卡: gi('超like卡'), 全员特典: gi('全员特典'), 终极活动获得: gi('终极活动获得') };
             return g;
         }
