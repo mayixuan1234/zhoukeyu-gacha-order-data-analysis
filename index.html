@@ -3000,7 +3000,9 @@ const GOODS_COLS = [
             gi('超like兑换卡面').split(/[、，,]/).forEach(s => { const c = cardOnly(s); if (c) addCard(c, 1); });
             if (xc && !/(未参与|审核未通过|重复填写|^$|^-$)/.test(xc)) { const c = cardOnly(xc); if (c) addCard(c, 1); }
             gi('成功兑换到的卡面').split(/[、，,]/).forEach(s => { s = s.trim(); const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
-            g.detail = { 宣传集赞礼: gi('宣传集赞礼'), 超like兑换卡面: gi('超like兑换卡面'), 成功兑换到的卡面: gi('成功兑换到的卡面'), 碎卡兑换审核状态: gi('碎卡兑换审核状态'), 超like卡: gi('超like卡'), 全员特典: gi('全员特典'), 终极活动获得: gi('终极活动获得') };
+            // 兑出的卡（用于兑换的卡）：用户已换出、不再拥有，从代发数量中扣减
+            gi('用于兑换的卡').split(/[、，,]/).forEach(s => { s = s.trim(); if (!s) return; const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); let name = m ? m[1] : cardOnly(s); let qty = m ? parseInt(m[2], 10) : 1; if (name && g.cards[name]) { g.cards[name] = Math.max(0, g.cards[name] - qty); } });
+            g.detail = { 是否端盒: gi('是否端盒'), 宣传集赞礼: gi('宣传集赞礼'), 超like兑换卡面: gi('超like兑换卡面'), 成功兑换到的卡面: gi('成功兑换到的卡面'), 用于兑换的卡: gi('用于兑换的卡'), 碎卡兑换审核状态: gi('碎卡兑换审核状态'), 超like卡: gi('超like卡'), 全员特典: gi('全员特典'), 终极活动获得: gi('终极活动获得') };
             return g;
         }
         // 读取 ccl1004 文件 → Map<下单账号, {商品key:数量}>
@@ -3054,15 +3056,15 @@ const GOODS_COLS = [
                 }
                 const cardNames = sortCardNames(Object.keys(CARD_IMAGES));
                 const goodsCols = GOODS_COLS.map(g => g.name);
-                const SRC_COLS = ['宣传集赞礼', '超like兑换卡面', '成功兑换到的卡面', '碎卡兑换审核状态', '超like卡', '全员特典', '终极活动获得'];
-                const header = ['下单账号', '收货人姓名', '收货人手机号', '收货地址', '最终收件人', '最终电话', '最终地址', '总张数'].concat(cardNames, goodsCols, SRC_COLS);
+                const SRC_COLS = ['是否端盒', '宣传集赞礼', '超like兑换卡面', '成功兑换到的卡面', '用于兑换的卡', '碎卡兑换审核状态', '超like卡', '全员特典', '终极活动获得'];
+                const header = ['下单账号', '收货人姓名', '收货人手机号', '收货地址', '总张数'].concat(cardNames, goodsCols, SRC_COLS, ['最终收件人', '最终电话', '最终地址']);
                 const wb = new ExcelJS.Workbook();
                 const ws = wb.addWorksheet('发货明细');
                 ws.getRow(1).values = header;
                 ws.getRow(1).height = 22;
                 ws.getRow(2).height = 81;
-                ws.getColumn(1).width = 14; ws.getColumn(2).width = 12; ws.getColumn(3).width = 14; ws.getColumn(4).width = 42; ws.getColumn(5).width = 12; ws.getColumn(6).width = 14; ws.getColumn(7).width = 42; ws.getColumn(8).width = 8;
-                const cardStart = 8;
+                ws.getColumn(1).width = 14; ws.getColumn(2).width = 12; ws.getColumn(3).width = 14; ws.getColumn(4).width = 42; ws.getColumn(5).width = 8;
+                const cardStart = 5;
                 for (let i = 0; i < cardNames.length; i++) ws.getColumn(cardStart + i).width = 18.67;
                 const goodsStart = cardStart + cardNames.length;
                 for (let i = 0; i < goodsCols.length; i++) ws.getColumn(goodsStart + i).width = 18.67;
@@ -3072,13 +3074,14 @@ const GOODS_COLS = [
                     const cg = useCcl ? (cclGoods.get(String(u.wechat || '').trim()) || cclGoods.get(String(u.phone || '').trim())) : null;
                     const cm = cg ? cg.cards : countUserCards(u);
                     const total = cardNames.reduce((sum, n) => sum + (cm[n] || 0), 0);
-                    const row = [u.wechat || '', u.recipientName || '', u.phone || '', u.address || '', '', '', '', total];
+                    const row = [u.wechat || '', u.recipientName || '', u.phone || '', u.address || '', total];
                     cardNames.forEach(n => row.push(cm[n] || 0));
                     const gg = new Map();
                     if (cg) Object.entries(cg.goods).forEach(([k, v]) => gg.set(k, v));
                     else mergeUserGoods(gg, u);
                     GOODS_COLS.forEach(g => row.push(gg.get(g.key) || 0));
                     SRC_COLS.forEach(s => row.push(cg ? (cg.detail[s] || '') : ''));
+                    row.push('', '', '');
                     ws.addRow(row);
                 });
                 // 第2行嵌图：卡面 + 商品图（裁中间卡本体，130x95 不变形）
