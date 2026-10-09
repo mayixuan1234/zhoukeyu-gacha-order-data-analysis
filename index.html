@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.4 23：19</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.9 20：30</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.4 23：19</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.9 20：30</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -2997,7 +2997,7 @@ const GOODS_COLS = [
             if (xc && !/(未参与|审核未通过|^$|^-$)/.test(xc)) add('宣传礼', 1);
             // 图鉴卡面四渠道累加：抽卡(获得卡片) + 宣传集赞礼 + 超like兑换卡面 + 碎卡兑换(成功兑换到的卡面)
             gi('获得卡片').split(/[;；]/).forEach(s => { s = s.trim(); const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
-            gi('超like兑换卡面').split(/[、，,]/).forEach(s => { const c = cardOnly(s); if (c) addCard(c, 1); });
+            gi('超like兑换卡面').split(/[、，,]/).forEach(s => { s = s.trim(); const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
             if (xc && !/(未参与|审核未通过|重复填写|^$|^-$)/.test(xc)) { const c = cardOnly(xc); if (c) addCard(c, 1); }
             gi('成功兑换到的卡面').split(/[、，,]/).forEach(s => { s = s.trim(); const m = /^(R\d+|SR\d+|SSR\d+|SSSR\d+)[x×]\s*(\d+)$/i.exec(s); if (m) addCard(m[1], m[2]); else { const c = cardOnly(s); if (c) addCard(c, 1); } });
             // 兑出的卡（用于兑换的卡）：用户已换出、不再拥有，从代发数量中扣减
