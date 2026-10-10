@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.9 20：30</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.10.10 15：40</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.9 20：30</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.10 15：40</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -2945,7 +2945,8 @@ const GOODS_COLS = [
     { key: '镜头签', name: '镜头签(A/B/C)', img: '' },
     { key: '周正', name: '周正小卡(D/E)', img: '' },
     { key: '开推', name: '开推制服(F)', img: '' },
-    { key: '宣传礼', name: '宣传集赞礼', img: '' }
+    { key: '宣传礼', name: '宣传集赞礼', img: '' },
+    { key: 'defRandom', name: 'DEF随机', img: '' }
 ];
 // 满赠周边文本解析（"名×数量 + 名 + ..."）→ 写入 g
         function parseManzengInto(text, g) {
@@ -2991,6 +2992,9 @@ const GOODS_COLS = [
                 else if (zj.indexOf('A/B/C随机2张') >= 0) { jt = 2; }
                 else if (zj.indexOf('A/B/C随机1张') >= 0) { jt = 1; }
                 if (jt + zz + kt > 0) { g.goods['镜头签'] = jt * sets; g.goods['周正'] = zz * sets; g.goods['开推'] = kt * sets; }
+                let defRnd = 0;
+                (zj.match(/D\/E\/F随机\s*(\d+)\s*张/g) || []).forEach(s2 => { const mm = s2.match(/(\d+)/); if (mm) defRnd += parseInt(mm[1], 10); });
+                if (defRnd > 0) g.goods['defRandom'] = defRnd * sets;
             }
             parseManzengInto(gi('个人满抽礼') || gi('个人满赠'), g.goods);
             const xc = gi('宣传集赞礼');
