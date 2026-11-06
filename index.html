@@ -211,6 +211,9 @@
                 <button class="btn" id="cardGalleryBtn">加载图鉴</button>
                 <button class="btn" id="shipImgExportBtn">📥 导出发货明细带图 Excel</button>
             </div>
+            <label style="margin-top:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
+                <input type="checkbox" id="shipBlockFormatCb" style="accent-color:#20517d;cursor:pointer;"> 分块格式（每条记录上方重复表头、前后各留一空行，纯数据不含图例图片；默认关闭＝带图整表连续导出）
+            </label>
             <div id="cardGalleryGrid" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;"></div>
         </div>
 
@@ -2943,7 +2946,7 @@ const GOODS_COLS = [
     { key: '周末随机', name: '周末活动随机', img: GOODS_IMG_DATA['周末随机'] },
     { key: '周末不重复', name: '周末活动不重复', img: GOODS_IMG_DATA['周末不重复'] },
     { key: '镜头签', name: '镜头签(A/B/C)', img: '' },
-    { key: 'def', name: 'DEF', img: '' },
+    { key: 'def', name: 'DEF(D/E/F)', img: '' },
     { key: '宣传礼', name: '宣传集赞礼', img: '' }
 ];
 // 满赠周边文本解析（"名×数量 + 名 + ..."）→ 写入 g
@@ -3048,7 +3051,12 @@ const GOODS_COLS = [
         async function exportShipWithImages() {
             if (!userData || userData.length === 0) { alert('请先在上方上传订单数据（se1）并点击"开始分析"'); return; }
             if (typeof ExcelJS === 'undefined') { alert('ExcelJS 未加载，请联网后重试'); return; }
-            const btn = document.getElementById('shipImgExportBtn'); const oldTxt = btn.textContent; btn.textContent = '⏳ 正在生成…（含图，需稍等）'; btn.disabled = true;
+            // 分块格式开关：勾选后每条记录纵向独立成块（表头重复 + 前后空行），且不嵌图；默认不勾选＝原带图整表导出
+            const blockFormatCb = document.getElementById('shipBlockFormatCb');
+            const blockMode = !!(blockFormatCb && blockFormatCb.checked);
+            const btn = document.getElementById('shipImgExportBtn'); const oldTxt = btn.textContent;
+            btn.textContent = blockMode ? '⏳ 正在生成分块格式…（纯数据）' : '⏳ 正在生成…（含图，需稍等）';
+            btn.disabled = true;
             try {
                 // 若已上传 ccl1004（活动方改好的基准表），商品数量以它为准；否则用原始数据分析结果
                 let cclGoods = new Map(); let useCcl = false;
@@ -3065,7 +3073,7 @@ const GOODS_COLS = [
                 const ws = wb.addWorksheet('发货明细');
                 ws.getRow(1).values = header;
                 ws.getRow(1).height = 22;
-                ws.getRow(2).height = 81;
+                if (!blockMode) ws.getRow(2).height = 81; // 图例行仅在带图整表导出时保留；分块格式不占图例行
                 ws.getColumn(1).width = 14; ws.getColumn(2).width = 12; ws.getColumn(3).width = 14; ws.getColumn(4).width = 42; ws.getColumn(5).width = 8;
                 const cardStart = 5;
                 for (let i = 0; i < cardNames.length; i++) ws.getColumn(cardStart + i).width = 18.67;
@@ -3085,12 +3093,19 @@ const GOODS_COLS = [
                     GOODS_COLS.forEach(g => row.push(gg.get(g.key) || 0));
                     SRC_COLS.forEach(s => row.push(cg ? (cg.detail[s] || '') : ''));
                     row.push('', '', '');
+                    if (blockMode) {
+                        ws.addRow([]);       // 分块格式：数据行前留一空行
+                        ws.addRow(header);   // 分块格式：重复一行表头
+                    }
                     ws.addRow(row);
                 });
-                // 第2行嵌图：卡面 + 商品图（裁中间卡本体，130x95 不变形）
+                if (blockMode) ws.addRow([]); // 分块格式：末条记录后留一空行
+                // 第2行嵌图：卡面 + 商品图（裁中间卡本体，130x95 不变形）；分块格式为纯数据，跳过全部嵌图
                 const pending = [];
-                for (let i = 0; i < cardNames.length; i++) pending.push({ n: cardNames[i], url: CARD_IMAGES[cardNames[i]], col: cardStart + i });
-                for (let i = 0; i < GOODS_COLS.length; i++) { const g = GOODS_COLS[i]; if (g.img) pending.push({ n: g.key, url: g.img, col: goodsStart + i }); }
+                if (!blockMode) {
+                    for (let i = 0; i < cardNames.length; i++) pending.push({ n: cardNames[i], url: CARD_IMAGES[cardNames[i]], col: cardStart + i });
+                    for (let i = 0; i < GOODS_COLS.length; i++) { const g = GOODS_COLS[i]; if (g.img) pending.push({ n: g.key, url: g.img, col: goodsStart + i }); }
+                }
                 for (const it of pending) {
                     let dataUrl = it.url;
                     if (!dataUrl.startsWith('data:')) dataUrl = await cropCardImage(it.url, 480);
@@ -3102,7 +3117,7 @@ const GOODS_COLS = [
                 }
                 const buffer = await wb.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = getTimestampFilename('发货明细带图_全部商品'); a.click();
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = getTimestampFilename(blockMode ? '发货明细带图_全部商品_分块格式' : '发货明细带图_全部商品'); a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);
             } catch (err) {
                 alert('导出失败：' + (err && err.message ? err.message : err));
