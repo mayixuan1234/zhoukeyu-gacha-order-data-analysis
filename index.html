@@ -218,6 +218,19 @@
                 <button class="btn" id="shipCompareExportBtn" disabled style="background:#eef3f9;color:#20517d;">导出对比报告</button>
                 <span style="font-size:12px;color:#999;">上传活动方手动制作的发货明细（如「发货明细1110版本」），按下单账号逐款比对卡面、商品与收货信息；报告含「卡面差异-款式级明细」「商品差异-分类级明细」及按款按类汇总</span>
             </div>
+            <!-- 对客少记清单一键导出：可选上传「未补邮名单」，命中手机号/下单账号者整人剔除 -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;padding:8px 10px;background:#f4f8fc;border:1px solid #dbe4ee;border-radius:8px;">
+                <span style="font-size:13px;color:#20517d;font-weight:600;">📤 对客少记清单（活动方按此补发）</span>
+                <label style="font-size:12px;color:#555;">未补邮名单（可选）：</label>
+                <input type="file" id="shipLessUnpaidInput" accept=".xlsx,.xls,.csv">
+                <button class="btn" id="shipLessUnpaidClearBtn" style="background:#eef3f9;color:#20517d;" title="清除已载入的未补邮名单，恢复全量口径">清除名单</button>
+                <button class="btn" id="shipLessExportBtn" disabled style="background:#eef3f9;color:#20517d;" title="只导出活动方少记（差值为负）的明细，多记一律不导出">📥 导出对客少记清单</button>
+                <span id="shipLessUnpaidStatus" style="font-size:12px;color:#888;">未上传未补邮名单（导出时不剔除未补邮）</span>
+                <span id="shipLessExportTip" style="font-size:12px;color:#888;"></span>
+            </div>
+            <div style="font-size:12px;color:#888;margin-top:4px;line-height:1.7;">
+                少记清单口径：差值＝活动方 − 平台，<b>只保留差值为负（活动方少记）</b>的行，多记一律不导出；上传未补邮名单后整人剔除并写入「剔除台账」；宣传集赞礼不参与待补发，单列口径说明。
+            </div>
             <div id="shipCompareResult" style="margin-top:8px;font-size:13px;color:#333;line-height:1.8;"></div>
             <label style="margin-top:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
                 <input type="checkbox" id="shipBlockFormatCb" style="accent-color:#20517d;cursor:pointer;"> 分块格式（每条记录上方重复表头、前后各留一空行，纯数据不含图例图片；默认关闭＝带图整表连续导出）
@@ -3281,146 +3294,285 @@ const GOODS_COLS = [
                         totalWithBox: total + (dh ? 86 : 0), duanhe: dh
                     };
                 });
-                // 3) 逐账号比对
-                const actByAcct = new Map(), actByPhone = new Map();
-                actList.forEach(a => { if (a.acct) actByAcct.set(a.acct, a); if (a.phone) actByPhone.set(a.phone, a); });
-                const usedAct = new Set();
-                const cardDiffRows = [], goodsDiffRows = [], infoDiffRows = [], onlyPlatRows = [];
-                // v1112 新增：款式级 / 分类级展开明细 + 按款按类聚合
-                const cardBrandRows = [], goodsCatRows = [];
-                const cardBrandAgg = new Map(), goodsCatAgg = new Map();
-                let cardBadCnt = 0, baseBadCnt = 0, goodsBadCnt = 0, infoBadCnt = 0, infoBadAcct = 0, absTotal = 0;
+                // ===== 3) 以「收货手机号」为唯一归并键，把下单账号合并为「人」 =====
+                // 并查集：同一手机号下的多个下单账号、以及同一账号在两侧出现（两侧手机号写法不同）都归为同一个人
+                const uf = new Map();
+                const ufFind = function (x) {
+                    if (!uf.has(x)) uf.set(x, x);
+                    let r = x;
+                    while (uf.get(r) !== r) r = uf.get(r);
+                    while (uf.get(x) !== r) { const nx = uf.get(x); uf.set(x, r); x = nx; }
+                    return r;
+                };
+                const ufUnion = function (a, b) { const ra = ufFind(a), rb = ufFind(b); if (ra !== rb) uf.set(rb, ra); };
+                const normPhone = v => String(v == null ? '' : v).replace(/\D/g, '');
+                actList.forEach(a => { ufFind('A:' + a.acct); const ph = normPhone(a.phone); if (ph) ufUnion('A:' + a.acct, 'P:' + ph); });
+                platList.forEach(p => { ufFind('A:' + p.acct); const ph = normPhone(p.phone); if (ph) ufUnion('A:' + p.acct, 'P:' + ph); });
+
+                const persons = new Map();
+                const touchP = function (root) {
+                    let g = persons.get(root);
+                    if (!g) {
+                        g = {
+                            phones: [], actAccts: new Set(), platAccts: new Set(),
+                            namesAct: [], namesPlat: [], addrsAct: [], addrsPlat: [],
+                            cardsAct: {}, cardsPlat: {}, goodsAct: {}, goodsPlat: {},
+                            sumBase: 0, sumCard: 0, sumWithBox: 0, dhAct: false, dhPlat: false
+                        };
+                        persons.set(root, g);
+                    }
+                    return g;
+                };
+                actList.forEach(a => {
+                    const g = touchP(ufFind('A:' + a.acct));
+                    g.actAccts.add(a.acct);
+                    const ph = normPhone(a.phone); if (ph) g.phones.push(ph);
+                    if (a.name) g.namesAct.push(a.name);
+                    if (a.addr) g.addrsAct.push(a.addr);
+                    Object.keys(a.cards || {}).forEach(k => { const kk = String(k).toUpperCase(); g.cardsAct[kk] = (g.cardsAct[kk] || 0) + (a.cards[k] || 0); });
+                    Object.keys(a.goods || {}).forEach(k => { g.goodsAct[k] = (g.goodsAct[k] || 0) + (a.goods[k] || 0); });
+                    g.sumCard += (a.cardSum || 0);
+                    g.sumBase += (a.base || ((a.cardSum || 0) + (a.duanhe ? 86 : 0)));
+                    if (a.duanhe) g.dhAct = true;
+                });
                 platList.forEach(p => {
-                    const a = actByAcct.get(p.acct) || (p.phone ? actByPhone.get(p.phone) : null) || null;
-                    if (!a) { onlyPlatRows.push([p.acct, p.name, p.phone, p.totalWithBox, p.duanhe ? '是' : '否']); return; }
-                    usedAct.add(a);
-                    // 3.1 卡面
-                    const aCards = {};
-                    Object.keys(a.cards).forEach(k => { aCards[String(k).toUpperCase()] = a.cards[k]; });
-                    const nameSet = new Set(cardNames.concat(Object.keys(aCards)));
-                    const parts = [];
+                    const g = touchP(ufFind('A:' + p.acct));
+                    g.platAccts.add(p.acct);
+                    const ph = normPhone(p.phone); if (ph) g.phones.push(ph);
+                    if (p.name) g.namesPlat.push(p.name);
+                    if (p.addr) g.addrsPlat.push(p.addr);
+                    Object.keys(p.cards || {}).forEach(k => { g.cardsPlat[k] = (g.cardsPlat[k] || 0) + (p.cards[k] || 0); });
+                    Object.keys(p.goods || {}).forEach(k => { g.goodsPlat[k] = (g.goodsPlat[k] || 0) + (p.goods[k] || 0); });
+                    g.sumWithBox += (p.totalWithBox || 0) + (p.duanhe ? 86 : 0);
+                    if (p.duanhe) g.dhPlat = true;
+                });
+
+                // 展示用：手机号取出现次数最多的一个；账号/姓名汇总为顿号连接
+                const labelOf = function (g) {
+                    const c = new Map();
+                    g.phones.forEach(p => { c.set(p, (c.get(p) || 0) + 1); });
+                    let best = '', bn = -1;
+                    c.forEach((n, p) => { if (n > bn) { bn = n; best = p; } });
+                    return best;
+                };
+                const acctOf = function (g) {
+                    const arr = Array.from(g.actAccts).concat(Array.from(g.platAccts));
+                    return Array.from(new Set(arr)).sort().join('、');
+                };
+                const nameOf = function (g) {
+                    const arr = (g.namesAct.length ? g.namesAct : g.namesPlat);
+                    return Array.from(new Set(arr)).join('、');
+                };
+
+                // ===== 4) 逐「人」比对（同一手机号下的所有下单账号数量合计后再比） =====
+                const cardDiffRows = [], cardBrandRows = [], goodsDiffRows = [], goodsCatRows = [], infoDiffRows = [];
+                const onlyPlatRows = [], onlyActRows = [], mergeRows = [];
+                const cardBrandAgg = new Map(), goodsCatAgg = new Map();
+                let cardBadCnt = 0, baseBadCnt = 0, goodsBadCnt = 0, infoBadCnt = 0, infoBadPerson = 0;
+                let absTotal = 0, matchedCnt = 0, nameWarnCnt = 0;
+                const cardNameAll = new Set(cardNames);
+                persons.forEach(g => {
+                    Object.keys(g.cardsAct).forEach(n => cardNameAll.add(n));
+                    Object.keys(g.cardsPlat).forEach(n => cardNameAll.add(n));
+                });
+                const allCardNames = sortCardNames(Array.from(cardNameAll));
+                const COMPARE_GOODS = GOODS_COLS.filter(x => x.key !== '宣传礼');
+                const goodsNameOf = k => (GOODS_COLS.find(x => x.key === k) || { name: k }).name;
+                const personRows = []; // 按人按类的数量矩阵（便于一眼看出哪类差多少）
+                const catDiffSet = new Set();
+
+                persons.forEach(g => {
+                    const label = labelOf(g), acctTxt = acctOf(g), nm = nameOf(g);
+                    const nAcct = new Set(Array.from(g.actAccts).concat(Array.from(g.platAccts))).size;
+                    const hasAct = g.actAccts.size > 0, hasPlat = g.platAccts.size > 0;
+                    if (nAcct >= 2) {
+                        mergeRows.push([label, acctTxt, nAcct,
+                            Array.from(g.actAccts).sort().join('、') || '—',
+                            Array.from(g.platAccts).sort().join('、') || '—',
+                            hasAct && hasPlat ? '双方均有（已合并为同一人）' : (hasAct ? '仅活动方有' : '仅平台有')]);
+                    }
+                    if (!hasAct) {
+                        onlyPlatRows.push([label, acctTxt, nm, nAcct, g.sumWithBox, g.dhPlat ? '是' : '否']);
+                        return;
+                    }
+                    if (!hasPlat) {
+                        onlyActRows.push([label, acctTxt, nm, nAcct, g.sumBase]);
+                        return;
+                    }
+                    matchedCnt++;
+                    // 4.1 卡面（按款）
+                    const cardDiffNames = [];
                     let brandDiffCnt = 0, brandActSum = 0, brandPlatSum = 0;
-                    nameSet.forEach(n => {
-                        const av = aCards[n] || 0, pv = p.cards[n] || 0;
+                    allCardNames.forEach(n => {
+                        const av = g.cardsAct[n] || 0, pv = g.cardsPlat[n] || 0;
                         if (av !== pv) {
-                            parts.push(n + '：活动方' + av + '/平台' + pv);
-                            brandDiffCnt++;
-                            brandActSum += av; brandPlatSum += pv;
-                            cardBrandRows.push([p.acct, p.name || a.name, p.phone, n, av, pv, av - pv,
-                                (av - pv) > 0 ? '活动方多记' : '活动方少记']);
+                            brandDiffCnt++; brandActSum += av; brandPlatSum += pv;
+                            cardDiffNames.push(n);
+                            cardBrandRows.push([label, acctTxt, nm, n, av, pv, av - pv, av > pv ? '活动方多记' : '活动方少记']);
                             const ag = cardBrandAgg.get(n) || { cnt: 0, sum: 0, over: 0, less: 0 };
                             ag.cnt++; ag.sum += (av - pv);
                             if (av > pv) ag.over++; else ag.less++;
                             cardBrandAgg.set(n, ag);
                         }
                     });
-                    const expBase = a.base || (a.cardSum + (a.duanhe ? 86 : 0));
-                    const delta = expBase - p.totalWithBox;
-                    if (parts.length || delta !== 0) {
+                    const delta = g.sumBase - g.sumWithBox;
+                    if (cardDiffNames.length || delta !== 0) {
                         cardBadCnt++;
                         if (delta !== 0) { baseBadCnt++; absTotal += Math.abs(delta); }
-                        cardDiffRows.push([
-                            p.acct, p.name || a.name, p.phone, expBase, a.cardSum, p.totalWithBox, delta,
+                        const brief = cardDiffNames.length
+                            ? (cardDiffNames.slice(0, 10).join('、') + (cardDiffNames.length > 10 ? ' 等 ' + cardDiffNames.length + ' 款' : ''))
+                            : '逐款一致（仅合计不一致，请核对端盒/补邮口径）';
+                        cardDiffRows.push([label, acctTxt, nm, nAcct, g.sumBase, g.sumCard, g.sumWithBox, delta,
                             brandDiffCnt, brandActSum, brandPlatSum,
-                            a.duanhe ? '是' : '否', p.duanhe ? '是' : '否',
-                            parts.join('；') || (delta !== 0 ? '逐款卡面一致，仅合计不一致（请核对端盒/补邮口径）' : '合计一致，逐款分布不同')
-                        ]);
+                            (g.dhAct ? '是' : '否') + ' / ' + (g.dhPlat ? '是' : '否'), brief]);
                     }
-                    // 3.2 商品
+                    // 4.2 商品（按类）
                     const gParts = [];
-                    let gActSum = 0, gPlatSum = 0;
-                    const gkeys = new Set(Object.keys(p.goods).concat(Object.keys(a.goods)));
-                    GOODS_COLS.forEach(g => gkeys.add(g.key));
-                    gkeys.forEach(k => {
-                        const av = a.goods[k] || 0, pv = p.goods[k] || 0;
+                    const matRow = { label: label, acct: acctTxt, name: nm, cells: {} };
+                    let gActSum = 0, gPlatSum = 0, gDiffCnt = 0;
+                    COMPARE_GOODS.forEach(gc => {
+                        const k = gc.key, nom = gc.name;
+                        const av = g.goodsAct[k] || 0, pv = g.goodsPlat[k] || 0;
+                        matRow.cells[nom] = (av || pv) ? (av + ' / ' + pv) : '';
                         if (av !== pv) {
-                            const nm = (GOODS_COLS.find(g => g.key === k) || { name: k }).name;
-                            gParts.push(nm + '：活动方' + av + '/平台' + pv);
-                            gActSum += av; gPlatSum += pv;
-                            goodsCatRows.push([p.acct, p.name || a.name, p.phone, nm, av, pv, av - pv,
-                                (av - pv) > 0 ? '活动方多记' : '活动方少记']);
-                            const ag = goodsCatAgg.get(nm) || { cnt: 0, sum: 0, over: 0, less: 0 };
+                            gDiffCnt++; gActSum += av; gPlatSum += pv;
+                            gParts.push(nom);
+                            catDiffSet.add(nom);
+                            goodsCatRows.push([label, acctTxt, nm, nom, av, pv, av - pv, av > pv ? '活动方多记' : '活动方少记']);
+                            const ag = goodsCatAgg.get(nom) || { cnt: 0, sum: 0, over: 0, less: 0 };
                             ag.cnt++; ag.sum += (av - pv);
                             if (av > pv) ag.over++; else ag.less++;
-                            goodsCatAgg.set(nm, ag);
+                            goodsCatAgg.set(nom, ag);
                         }
                     });
-                    if (gParts.length) {
+                    if (gDiffCnt) {
                         goodsBadCnt++;
-                        goodsDiffRows.push([p.acct, p.name || a.name, p.phone, gParts.length, gActSum, gPlatSum, gPlatSum - gActSum, gParts.join('；')]);
+                        goodsDiffRows.push([label, acctTxt, nm, nAcct, gDiffCnt, gActSum, gPlatSum, gActSum - gPlatSum, gParts.join('、')]);
                     }
-                    // 3.3 收货信息
-                    let acctBad = false;
-                    [['收货人姓名', a.name, p.name], ['收货人手机号', a.phone, p.phone], ['收货地址', a.addr, p.addr]].forEach(t => {
-                        if (!sameInfoText(t[0], t[1], t[2])) { infoBadCnt++; acctBad = true; infoDiffRows.push([p.acct, t[0], t[1], t[2]]); }
-                    });
-                    if (acctBad) infoBadAcct++;
+                    if (gDiffCnt || cardDiffNames.length) personRows.push(matRow);
+                    // 4.3 收货信息（按人聚合后比对；同人多账号导致的信息不一致单独标注为提示）
+                    let pBad = false;
+                    const aNameTxt = Array.from(new Set(g.namesAct)).join('、'), pNameTxt = Array.from(new Set(g.namesPlat)).join('、');
+                    if (aNameTxt || pNameTxt) {
+                        const nmNorm = v => String(v == null ? '' : v).replace(/[\s\u3000·.,，。、()（）\[\]【】\-_\/\\|'"“”]+/g, '').toLowerCase();
+                        const nmSame = (x, y) => { const a = nmNorm(x), b = nmNorm(y); if (!a || !b) return a === b; return a === b || a.indexOf(b) >= 0 || b.indexOf(a) >= 0; };
+                        const nOk = g.namesAct.some(x => g.namesPlat.some(y => nmSame(x, y)));
+                        if (g.namesAct.length && g.namesPlat.length && !nOk) {
+                            infoBadCnt++; nameWarnCnt++;
+                            infoDiffRows.push([label, acctTxt, '收货人姓名', aNameTxt, pNameTxt, '提示（右列多为平台昵称/收件称呼，非数量问题）']);
+                        }
+                    }
+                    const aAddrTxt = Array.from(new Set(g.addrsAct)).join(' ｜ '), pAddrTxt = Array.from(new Set(g.addrsPlat)).join(' ｜ ');
+                    if (aAddrTxt || pAddrTxt) {
+                        const aOk = sameInfoText('收货地址', g.addrsAct[0] || '', g.addrsPlat[0] || '')
+                            || g.addrsAct.some(x => g.addrsPlat.some(y => sameInfoText('收货地址', x, y)));
+                        if (!aOk) {
+                            infoBadCnt++; pBad = true;
+                            infoDiffRows.push([label, acctTxt, '收货地址', aAddrTxt, pAddrTxt, '需核对（地址不同，可能影响发货）']);
+                        }
+                    }
+                    if (pBad) infoBadPerson++;
                 });
-                const onlyActRows = actList.filter(a => !usedAct.has(a))
-                    .map(a => [a.acct, a.name, a.phone, a.base || (a.cardSum + (a.duanhe ? 86 : 0))]);
-                // 4) 汇总为页签数据（网页展示与导出共用）
+
+                const goodsCatNames = COMPARE_GOODS.map(x => x.name).filter(n => catDiffSet.has(n));
+                goodsCatNames.sort((x, y) => ((goodsCatAgg.get(y) || { cnt: 0 }).cnt - (goodsCatAgg.get(x) || { cnt: 0 }).cnt));
+
+                // ===== 5) 汇总为页签数据（网页展示与导出共用） =====
                 const sheetsDef = [];
                 const addSheet = (name, header, dataRows, widths) => {
                     sheetsDef.push({ name: name, header: header, rows: dataRows || [], widths: widths || [] });
                 };
+                const multiPhoneCnt = mergeRows.filter(r => r[2] >= 2).length;
                 const summary = [
-                    ['平台账号数（订单分析结果）', platList.length],
-                    ['活动方账号数（手动发货明细）', actList.length],
-                    ['双方成功匹配账号数', usedAct.size],
+                    ['归并口径', '以「收货手机号」为唯一归并键：同一手机号下的多个下单账号数量先合计再比对；平台侧同样按手机号回退聚合'],
+                    ['平台下单账号数', platList.length],
+                    ['活动方下单账号数', actList.length],
+                    ['归并后「人」数（平台）', Array.from(persons.values()).filter(g => g.platAccts.size > 0).length],
+                    ['归并后「人」数（活动方）', Array.from(persons.values()).filter(g => g.actAccts.size > 0).length],
+                    ['其中一人多账号的「人」数', multiPhoneCnt],
+                    ['双方成功匹配「人」数', matchedCnt],
                     ['仅平台有（活动方明细缺少）', onlyPlatRows.length],
                     ['仅活动方有（平台无此账号）', onlyActRows.length],
-                    ['卡面数量/分布不一致账号数', cardBadCnt],
-                    ['　其中卡面合计张数不一致账号数', baseBadCnt],
+                    ['卡面数量/分布不一致「人」数', cardBadCnt],
+                    ['　其中卡面合计张数不一致「人」数', baseBadCnt],
                     ['卡面合计差异绝对值累计（张）', absTotal],
-                    ['商品数量不一致账号数', goodsBadCnt],
-                    ['收货信息不一致字段条数', infoBadCnt],
-                    ['　涉及账号数', infoBadAcct],
+                    ['商品数量不一致「人」数', goodsBadCnt],
+                    ['收货地址不一致「人」数', infoBadPerson],
+                    ['收货信息差异条数（含姓名称呼提示）', infoBadCnt],
+                    ['　其中姓名称呼差异条数（仅提示）', nameWarnCnt],
                     ['平台侧数据来源', useCcl ? '已上传 ccl1004 基准表（商品以它为准）' : '原始订单数据分析结果（未上传 ccl1004）'],
-                    ['对比口径说明', '卡面按款比对；商品按 19 类比对；活动方「全员满赠(3张)」「10抽全员特典(9张)」为固定赠品，平台发货明细无对应列，不参与对比'],
-                    ['端盒口径说明', '平台卡面合计已按端盒 +86 张对齐，与活动方「基础小卡张数」口径一致；两列端盒标记并列展示便于核对'],
-                    ['收货信息比对规则', '手机号仅比对数字；地址忽略空格/大小写并折叠重复前缀，一方为另一方的完整子串视为一致（降低平台地址重复拼接造成的误报）'],
-                    ['款式级明细说明', '「卡面差异-款式级明细」「商品差异-分类级明细」按 账号×单款/单类 逐条展开（仅列有差异的项），可直接筛选/透视/按款排序；「按款式汇总」「按分类汇总」给出每款每类的涉及账号数与差值合计，便于定位集中出错项'],
+                    ['对比口径说明', '卡面按款比对；商品按 18 类比对（「宣传集赞礼」为是否获得的标记列，不参与数量比对）；活动方「全员满赠(3张)」「10抽全员特典(9张)」为固定赠品，平台发货明细无对应列，不参与对比'],
+                    ['端盒口径说明', '平台卡面合计已按端盒 +86 张对齐，与活动方「基础小卡张数」口径一致；端盒标记按「活动方 / 平台」并列展示'],
+                    ['收货信息比对规则', '手机号归并后不再比对；姓名、地址忽略空格/大小写与重复前缀，一方为另一方完整子串视为一致'],
+                    ['展示说明', '「商品差异」只列差异分类名称，具体差多少看「商品差异-分类级明细」或「商品差异-按人对照表」；所有逐条明细页签均按「人」一行，不再因多账号拆成多行'],
                     ['生成时间', new Date().toLocaleString('zh-CN')]
                 ];
-                addSheet('对比总览', ['指标', '数值'], summary, [36, 80]);
-                // v1112：按款 / 按类聚合，供汇总页签使用
-                const cardBrandAggRows = Array.from(cardBrandAgg.entries())
-                    .map(([n, v]) => [n, v.cnt, v.over, v.less, v.sum])
-                    .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
-                const goodsCatAggRows = Array.from(goodsCatAgg.entries())
-                    .map(([n, v]) => [n, v.cnt, v.over, v.less, v.sum])
-                    .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
-                cardBrandRows.sort((x, y) => String(x[0]).localeCompare(String(y[0])) || x[3].localeCompare(y[3]));
+                addSheet('对比总览', ['指标', '数值'], summary, [34, 96]);
+                goodsDiffRows.sort((x, y) => (y[4] - x[4]) || String(x[0]).localeCompare(String(y[0])));
                 goodsCatRows.sort((x, y) => String(x[0]).localeCompare(String(y[0])) || x[3].localeCompare(y[3]));
-                addSheet('卡面差异',
-                    ['下单账号', '收货人姓名', '收货人手机号', '活动方基础小卡张数', '活动方卡面合计(不含端盒86)', '平台卡面合计(含端盒86)', '合计差值(活动方-平台)', '差异款数', '差异款-活动方张数', '差异款-平台张数', '活动方端盒', '平台端盒', '逐款差异明细（活动方/平台）'],
-                    cardDiffRows, [16, 12, 14, 16, 20, 20, 18, 10, 14, 14, 10, 10, 90]);
-                addSheet('卡面差异-按款式汇总',
-                    ['卡款', '涉及账号数', '活动方多记账号数', '活动方少记账号数', '差值合计(活动方-平台)'],
-                    cardBrandAggRows, [12, 14, 18, 18, 20]);
-                addSheet('卡面差异-款式级明细',
-                    ['下单账号', '收货人姓名', '收货人手机号', '卡款', '活动方数量', '平台数量', '差值(活动方-平台)', '差异方向'],
-                    cardBrandRows, [16, 12, 14, 10, 12, 12, 18, 14]);
+                cardDiffRows.sort((x, y) => Math.abs(y[7]) - Math.abs(x[7]) || String(x[0]).localeCompare(String(y[0])));
+                cardBrandRows.sort((x, y) => String(x[0]).localeCompare(String(y[0])) || x[3].localeCompare(y[3]));
                 addSheet('商品差异',
-                    ['下单账号', '收货人姓名', '收货人手机号', '差异类数', '差异类-活动方张数', '差异类-平台张数', '差值(平台-活动方)', '逐类差异明细（活动方/平台）'],
-                    goodsDiffRows, [16, 12, 14, 10, 16, 16, 18, 110]);
-                addSheet('商品差异-按分类汇总',
-                    ['商品分类', '涉及账号数', '活动方多记账号数', '活动方少记账号数', '差值合计(活动方-平台)'],
-                    goodsCatAggRows, [24, 14, 18, 18, 20]);
+                    ['收货手机号', '下单账号（可能多个）', '收货人姓名', '归并账号数', '差异类数', '活动方数量合计', '平台数量合计', '差值(活动方-平台)', '差异分类'],
+                    goodsDiffRows, [14, 24, 12, 10, 9, 14, 14, 18, 44]);
                 addSheet('商品差异-分类级明细',
-                    ['下单账号', '收货人姓名', '收货人手机号', '商品分类', '活动方数量', '平台数量', '差值(活动方-平台)', '差异方向'],
-                    goodsCatRows, [16, 12, 14, 24, 12, 12, 18, 14]);
-                addSheet('收货信息差异', ['下单账号', '字段', '活动方', '平台'], infoDiffRows, [16, 14, 40, 40]);
-                addSheet('仅平台有', ['下单账号', '收货人姓名', '手机号', '平台卡面合计', '平台端盒'], onlyPlatRows, [16, 12, 14, 14, 10]);
-                addSheet('仅活动方有', ['下单账号', '收货人姓名', '手机号', '活动方基础小卡张数'], onlyActRows, [16, 12, 14, 18]);
-                // 5) 站内展示（不自动下载）
+                    ['收货手机号', '下单账号（可能多个）', '收货人姓名', '商品分类', '活动方数量', '平台数量', '差值(活动方-平台)', '差异方向'],
+                    goodsCatRows, [14, 24, 12, 20, 12, 12, 18, 14]);
+                addSheet('商品差异-按分类汇总',
+                    ['商品分类', '涉及人数', '活动方多记人数', '活动方少记人数', '差值合计(活动方-平台)'],
+                    Array.from(goodsCatAgg.entries()).map(([n, v]) => [n, v.cnt, v.over, v.less, v.sum])
+                        .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])), [20, 12, 16, 16, 20]);
+                addSheet('商品差异-按人对照表',
+                    ['收货手机号', '下单账号（可能多个）', '收货人姓名'].concat(goodsCatNames).concat(['备注明细']),
+                    personRows.map(r => [r.label, r.acct, r.name].concat(goodsCatNames.map(n => r.cells[n] || '')).concat([
+                        goodsCatNames.filter(n => { const s = (r.cells[n] || '').split(' / '); return s.length === 2 && s[0] !== s[1]; }).map(n => n + ':' + r.cells[n]).join('；')
+                    ])),
+                    [14, 24, 12].concat(goodsCatNames.map(() => 12)).concat([60]));
+                addSheet('卡面差异',
+                    ['收货手机号', '下单账号（可能多个）', '收货人姓名', '归并账号数', '活动方基础小卡张数', '活动方卡面合计(不含端盒86)', '平台卡面合计(含端盒86)', '合计差值(活动方-平台)', '差异款数', '差异款-活动方张数', '差异款-平台张数', '端盒(活动方 / 平台)', '差异款号'],
+                    cardDiffRows, [14, 24, 12, 10, 16, 20, 20, 18, 10, 14, 14, 16, 40]);
+                addSheet('卡面差异-款式级明细',
+                    ['收货手机号', '下单账号（可能多个）', '收货人姓名', '卡款', '活动方数量', '平台数量', '差值(活动方-平台)', '差异方向'],
+                    cardBrandRows, [14, 24, 12, 10, 12, 12, 18, 14]);
+                addSheet('卡面差异-按款式汇总',
+                    ['卡款', '涉及人数', '活动方多记人数', '活动方少记人数', '差值合计(活动方-平台)'],
+                    Array.from(cardBrandAgg.entries()).map(([n, v]) => [n, v.cnt, v.over, v.less, v.sum])
+                        .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])), [12, 12, 16, 16, 20]);
+                addSheet('收货信息差异', ['收货手机号', '下单账号（可能多个）', '字段', '活动方', '平台', '判定'], infoDiffRows, [14, 24, 12, 40, 40, 32]);
+                addSheet('仅平台有', ['收货手机号', '下单账号（可能多个）', '收货人姓名', '归并账号数', '平台卡面合计(含端盒86)', '平台端盒'], onlyPlatRows, [14, 24, 12, 10, 20, 10]);
+                addSheet('仅活动方有', ['收货手机号', '下单账号（可能多个）', '收货人姓名', '归并账号数', '活动方基础小卡张数'], onlyActRows, [14, 24, 12, 10, 18]);
+                addSheet('手机号归并清单', ['收货手机号', '合并的下单账号', '账号数', '活动方账号', '平台账号', '说明'], mergeRows, [14, 34, 9, 30, 30, 26]);
+
+                // ===== 6) 站内展示（不自动下载） =====
+                // 集赞礼只是「是否获得」的资格标记（不参与数量比对），此处统计平台侧达标人数与数量，供「集赞口径说明」页签使用
+                let jizanHolders = 0, jizanSum = 0;
+                platList.forEach(p => {
+                    const v = Number((p.goods && p.goods['宣传礼']) || 0);
+                    if (v > 0) { jizanHolders++; jizanSum += v; }
+                });
                 __shipCompareRes = {
                     sheets: sheetsDef,
+                    // 对客少记清单所需的逐条差异明细（列定义见下方各 addSheet 的表头），导出时再按其固定口径过滤
+                    lessSrc: {
+                        goodsCatRows: goodsCatRows,
+                        cardBrandRows: cardBrandRows,
+                        infoDiffRows: infoDiffRows,
+                        meta: {
+                            platSrc: useCcl ? '已上传 ccl1004 基准表（商品以它为准）' : '原始订单数据分析结果（未上传 ccl1004）',
+                            platAcctCnt: platList.length,
+                            actAcctCnt: actList.length,
+                            matchedCnt: matchedCnt,
+                            jizanHolders: jizanHolders,
+                            jizanSum: jizanSum
+                        }
+                    },
                     stat: {
-                        platCnt: platList.length, actCnt: actList.length, matched: usedAct.size,
+                        platCnt: platList.length, actCnt: actList.length, matched: matchedCnt,
                         cardBad: cardBadCnt, baseBad: baseBadCnt, absTotal: absTotal,
-                        goodsBad: goodsBadCnt, infoBad: infoBadCnt,
-                        onlyPlat: onlyPlatRows.length, onlyAct: onlyActRows.length
+                        goodsBad: goodsBadCnt, infoBad: infoBadCnt, infoBadPerson: infoBadPerson,
+                        onlyPlat: onlyPlatRows.length, onlyAct: onlyActRows.length,
+                        personPlat: Array.from(persons.values()).filter(g => g.platAccts.size > 0).length,
+                        multiPhone: multiPhoneCnt
                     }
                 };
                 renderShipCompareUI(__shipCompareRes);
@@ -3440,13 +3592,16 @@ const GOODS_COLS = [
             const st = res.stat;
             const expBtn = document.getElementById('shipCompareExportBtn');
             if (expBtn) { expBtn.disabled = false; expBtn.style.display = 'inline-block'; }
+            // 对比结果出来后即允许导出对客少记清单（未补邮名单为可选，未上传则注明未剔除）
+            const lessBtn = document.getElementById('shipLessExportBtn');
+            if (lessBtn) { lessBtn.disabled = false; }
             let html = '<div style="padding:10px 12px;background:#f4f8fc;border:1px solid #dbe4ee;border-radius:8px;margin-bottom:10px;line-height:1.9;">'
-                + '✅ 对比完成：平台 <b>' + st.platCnt + '</b> 个账号 / 活动方 <b>' + st.actCnt + '</b> 个账号，匹配 <b>' + st.matched + '</b> 个　'
+                + '✅ 对比完成（已按收货手机号归并为「人」）：平台 <b>' + st.platCnt + '</b> 个账号 / 归并后 <b>' + st.personPlat + '</b> 人，活动方 <b>' + st.actCnt + '</b> 个账号，双方匹配 <b>' + st.matched + '</b> 人（其中一人多账号 <b>' + st.multiPhone + '</b> 人已合并）　'
                 + '卡面不一致 <b style="color:#c0392b;">' + st.cardBad + '</b> 个（合计张数不一致 ' + st.baseBad + '，绝对差累计 ' + st.absTotal + ' 张）'
                 + '｜商品不一致 <b style="color:#c0392b;">' + st.goodsBad + '</b> 个'
-                + '｜收货信息不一致 <b style="color:#c0392b;">' + st.infoBad + '</b> 条'
+                + '｜收货地址不一致 <b style="color:#c0392b;">' + st.infoBadPerson + '</b> 人（信息差异 ' + st.infoBad + ' 条，含姓名称呼提示）'
                 + '｜仅平台有 <b>' + st.onlyPlat + '</b> 个｜仅活动方有 <b>' + st.onlyAct + '</b> 个'
-                + '<br><span style="color:#888;">下方按页签查看明细，需要留档或发给同事可点「导出对比报告」下载 Excel。</span></div>';
+                + '<br><span style="color:#888;">下方按页签查看明细，需要留档或发给同事可点「导出对比报告」下载 Excel；要给活动方补发，点下方「导出对客少记清单」（只出活动方少记部分）。</span></div>';
             html += '<div id="scTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>';
             html += '<div id="scTableWrap"></div>';
             box.innerHTML = html;
@@ -3480,27 +3635,61 @@ const GOODS_COLS = [
             __scPage = page;
             const rows = s.rows.slice(page * PS, page * PS + PS);
             const wrap = document.getElementById('scTableWrap');
-            let html = '<div style="max-height:540px;overflow:auto;border:1px solid #dbe4ee;border-radius:8px;background:#fff;">'
-                + '<table style="border-collapse:collapse;font-size:12px;white-space:nowrap;">';
-            html += '<thead><tr>' + s.header.map(h => '<th style="position:sticky;top:0;z-index:2;background:#eaf1f8;color:#20517d;border:1px solid #dbe4ee;padding:6px 8px;text-align:left;">' + escHtml(h) + '</th>').join('') + '</tr></thead><tbody>';
+            const colW = function (h) {
+                h = String(h || '');
+                if (h.indexOf('手机号') >= 0) return 116;
+                if (h.indexOf('下单账号') >= 0) return 170;
+                if (h.indexOf('姓名') >= 0) return 86;
+                if (h.indexOf('商品分类') >= 0 || h.indexOf('卡款') >= 0 || h.indexOf('字段') >= 0) return 104;
+                if (h.indexOf('差异分类') >= 0 || h.indexOf('差异款号') >= 0 || h.indexOf('地址') >= 0
+                    || h.indexOf('明细') >= 0 || h.indexOf('说明') >= 0 || h.indexOf('判定') >= 0) return 300;
+                if (h.indexOf('端盒') >= 0) return 124;
+                return 94;
+            };
+            let html = '<div style="max-height:560px;overflow:auto;border:1px solid #dbe4ee;border-radius:8px;background:#fff;">'
+                + '<table style="border-collapse:separate;border-spacing:0;font-size:12px;table-layout:fixed;width:max-content;min-width:100%;">';
+            html += '<colgroup>' + s.header.map(h => '<col style="width:' + colW(h) + 'px;">').join('') + '</colgroup>';
+            html += '<thead><tr>' + s.header.map((h, j) => '<th style="position:sticky;top:0;'
+                + (j === 0 ? 'left:0;z-index:4;' : 'z-index:3;')
+                + 'background:#eaf1f8;color:#20517d;border-bottom:1px solid #dbe4ee;border-right:1px solid #e4ecf5;'
+                + 'padding:7px 8px;text-align:left;font-weight:600;white-space:normal;line-height:1.35;">' + escHtml(h) + '</th>').join('') + '</tr></thead><tbody>';
             if (!rows.length) {
                 html += '<tr><td colspan="' + s.header.length + '" style="padding:16px;text-align:center;color:#888;">无差异记录</td></tr>';
             } else {
-                rows.forEach(r => {
-                    html += '<tr>' + s.header.map((_, j) => {
+                let __gKey = null, __gBand = false;
+                rows.forEach((r, ri) => {
+                    const __isNew = (r[0] !== __gKey);
+                    if (__isNew) { __gKey = r[0]; __gBand = !__gBand; }
+                    const zebra = __gBand ? '#f3f8fd' : '#ffffff';
+                    html += '<tr>' + s.header.map((h, j) => {
                         const v = (r[j] === undefined || r[j] === null) ? '' : r[j];
-                        return '<td style="border:1px solid #eef2f7;padding:5px 8px;max-width:520px;white-space:normal;">' + escHtml(v) + '</td>';
+                        let bg = zebra, extra = '';
+                        if (typeof v === 'number' && h.indexOf('差值') >= 0 && v !== 0) {
+                            extra += 'color:' + (v > 0 ? '#c0392b' : '#1f6fb2') + ';font-weight:600;';
+                            bg = (v > 0) ? '#fdf1f0' : '#eef5fc';
+                        }
+                        if (h.indexOf('差异方向') >= 0) extra += 'color:' + (String(v).indexOf('多记') >= 0 ? '#c0392b' : '#1f6fb2') + ';';
+                        let st = 'padding:6px 8px;border-bottom:1px solid #eef2f7;border-right:1px solid #f3f6fa;'
+                            + 'vertical-align:top;white-space:normal;word-break:break-all;line-height:1.45;background:' + bg + ';' + extra;
+                        if (j === 0) st += 'position:sticky;left:0;z-index:2;font-variant-numeric:tabular-nums;font-weight:600;color:#20517d;';
+                        if (typeof v === 'number') st += 'text-align:right;font-variant-numeric:tabular-nums;';
+                        if (__isNew && ri > 0) st += 'border-top:2px solid #bcd2e6;';
+                        return '<td style="' + st + '">' + escHtml(v) + '</td>';
                     }).join('') + '</tr>';
                 });
             }
             html += '</tbody></table></div>';
+            const nav = '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',0)">首页</button>'
+                + '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',' + (page - 1) + ')">上一页</button>'
+                + '<span>第 ' + (page + 1) + ' / ' + pages + ' 页（共 ' + total + ' 行）</span>'
+                + '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',' + (page + 1) + ')">下一页</button>'
+                + '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',' + (pages - 1) + ')">末页</button>';
             if (pages > 1) {
-                html += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;font-size:12px;color:#555;">'
-                    + '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',' + (page - 1) + ')">上一页</button>'
-                    + '<span>第 ' + (page + 1) + ' / ' + pages + ' 页（共 ' + total + ' 行）</span>'
-                    + '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',' + (page + 1) + ')">下一页</button></div>';
+                html += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;font-size:12px;color:#555;flex-wrap:wrap;">' + nav
+                    + '<span style="color:#999;">（红色＝活动方多记 / 蓝色＝活动方少记；每行代表一个收货手机号归并后的「人」）</span></div>';
             } else {
-                html += '<div style="margin-top:6px;font-size:12px;color:#888;">共 ' + total + ' 行</div>';
+                html += '<div style="margin-top:6px;font-size:12px;color:#888;">共 ' + total + ' 行　'
+                    + '<span style="color:#999;">（红色＝活动方多记 / 蓝色＝活动方少记；每行代表一个收货手机号归并后的「人」）</span></div>';
             }
             wrap.innerHTML = html;
         }
@@ -3545,8 +3734,292 @@ const GOODS_COLS = [
             }
         }
 
+        // ==================== 对客少记清单一键导出（给活动方按清单补发） ====================
+        // 固定口径（后续维护请勿随意改动）：
+        //   1) 差值 = 活动方数量 − 平台数量；只保留差值 < 0（活动方少记）的行，> 0（多记）与 = 0（一致）一律不导出；
+        //   2) 「未补邮名单」为可选上传项（xlsx/xls/csv），自动识别手机号列与下单账号列，命中者整人剔除并写入剔除台账；
+        //   3) 「宣传集赞礼」只做资格标记，不参与数量比对、不进入待补发，单列「集赞口径说明」；
+        //   4) 收货地址不一致且确有补发需求的人，单列「收货地址需核对」，避免补发寄错。
+        let __unshippedList = null;   // 已载入的未补邮名单：{ phones:Set, accts:Set, fileName, sheetCnt }
+        let __shipLessRes = null;     // 最近一次生成的对客少记清单页签数据（供站内提示与后续复用）
+
+        // 手机号归一化：只保留数字，避免 Excel 数字格式 / 文本混写导致匹配不上
+        function lessNormPhone(v) { return String(v == null ? '' : v).replace(/\D/g, ''); }
+
+        // 读取未补邮名单：遍历全部 Sheet，优先用表头识别「手机号」「下单账号」列；表头不符时兜底抓 11 位手机号
+        async function parseUnshippedListFile(file) {
+            const phones = new Set(), accts = new Set();
+            const buf = await file.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            let wb;
+            try {
+                if (/\.csv$/i.test(String(file.name || ''))) {
+                    // CSV 先按 UTF-8 解码，出现替换字符则回退 GBK（活动方名单常见 GBK 导出）
+                    let txt = new TextDecoder('utf-8').decode(bytes);
+                    if (txt.indexOf('\uFFFD') >= 0) { try { txt = new TextDecoder('GBK').decode(bytes); } catch (e2) { } }
+                    wb = XLSX.read(txt, { type: 'string' });
+                } else {
+                    wb = XLSX.read(bytes, { type: 'array' });
+                }
+            } catch (e) { throw new Error('文件解析失败，请确认是 xlsx / xls / csv 格式'); }
+            let sheetCnt = 0;
+            wb.SheetNames.forEach(function (sn) {
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' });
+                if (!rows || !rows.length) return;
+                sheetCnt++;
+                const hdr = (rows[0] || []).map(function (h) { return String(h == null ? '' : h).replace(/\s+/g, ''); });
+                const findCol = function (kws) { return hdr.findIndex(function (h) { return kws.some(function (k) { return h.indexOf(k) >= 0; }); }); };
+                const iPh = findCol(['手机', '电话', '联系方式']);        // 手机号列
+                const iAc = findCol(['下单账号', '账号', '微信', '昵称']); // 下单账号列
+                rows.slice(1).forEach(function (r) {
+                    let got = false;
+                    if (iPh >= 0) { const ph = lessNormPhone(r[iPh]); if (ph.length >= 7) { phones.add(ph); got = true; } }
+                    if (iAc >= 0) { const ac = String(r[iAc] == null ? '' : r[iAc]).trim(); if (ac) { accts.add(ac); got = true; } }
+                    if (!got) {
+                        // 兜底：整行扫描 11 位手机号（应对无表头 / 表头命名不规范的名单）
+                        const line = (r || []).map(function (v) { return String(v == null ? '' : v); }).join(' ');
+                        const ms = line.match(/1\d{10}/g);
+                        if (ms) ms.forEach(function (m) { phones.add(m); });
+                    }
+                });
+            });
+            return { phones: phones, accts: accts, fileName: file.name || '', sheetCnt: sheetCnt };
+        }
+
+        // 未补邮名单上传（change 事件）：解析成功后只保存在内存，导出时实时剔除
+        async function handleUnshippedListFile(e) {
+            const st = document.getElementById('shipLessUnpaidStatus');
+            const tip = document.getElementById('shipLessExportTip');
+            const emptyTxt = '未上传未补邮名单（导出时不剔除未补邮）';
+            const f = e && e.target && e.target.files ? e.target.files[0] : null;
+            if (!f) { __unshippedList = null; if (st) { st.textContent = emptyTxt; st.style.color = '#888'; } return; }
+            if (typeof XLSX === 'undefined') { alert('XLSX 未加载，请联网后重试'); return; }
+            if (st) { st.textContent = '⏳ 正在读取未补邮名单…'; st.style.color = '#888'; }
+            if (tip) { tip.textContent = ''; }
+            try {
+                const res = await parseUnshippedListFile(f);
+                if (!res.phones.size && !res.accts.size) throw new Error('未识别到手机号或下单账号，请检查名单内容');
+                __unshippedList = res;
+                if (st) {
+                    st.textContent = '✅ 已载入「' + res.fileName + '」：手机号 ' + res.phones.size + ' 个 / 账号 ' + res.accts.size + ' 个（导出时自动剔除）';
+                    st.style.color = '#1f6fb2';
+                }
+            } catch (err) {
+                __unshippedList = null;
+                if (st) { st.textContent = emptyTxt; st.style.color = '#888'; }
+                alert('未补邮名单读取失败：' + (err && err.message ? err.message : err));
+            }
+        }
+
+        // 清除已载入的未补邮名单，恢复「不剔除未补邮」的全量口径
+        function clearUnshippedList() {
+            __unshippedList = null;
+            const inp = document.getElementById('shipLessUnpaidInput');
+            if (inp) inp.value = '';
+            const st = document.getElementById('shipLessUnpaidStatus');
+            if (st) { st.textContent = '未上传未补邮名单（导出时不剔除未补邮）'; st.style.color = '#888'; }
+            const tip = document.getElementById('shipLessExportTip');
+            if (tip) { tip.textContent = ''; }
+        }
+
+        // 判断一条少记明细是否命中未补邮名单：收货手机号全等，或任一归并下单账号全等
+        function isUnshippedRow(label, acctTxt) {
+            if (!__unshippedList) return false;
+            const ph = lessNormPhone(label);
+            if (ph && __unshippedList.phones.has(ph)) return true;
+            const arr = String(acctTxt || '').split(/[、,，;；\s]+/).filter(Boolean);
+            return arr.some(function (a) { return __unshippedList.accts.has(a); });
+        }
+
+        // 生成「对客少记清单」页签数据，返回 [{name, header, rows, widths}, ...]
+        // 数据来源 __shipCompareRes.lessSrc（对比时保存的逐条差异明细，列定义见 exportShipCompareReport 中各 addSheet 的表头）：
+        //   goodsCatRows  [收货手机号, 下单账号, 姓名, 商品分类, 活动方数量, 平台数量, 差值, 差异方向]
+        //   cardBrandRows [收货手机号, 下单账号, 姓名, 卡款,     活动方数量, 平台数量, 差值, 差异方向]
+        //   infoDiffRows  [收货手机号, 下单账号, 字段, 活动方值, 平台值, 判定]
+        function buildShipLessSheets() {
+            if (!__shipCompareRes || !__shipCompareRes.lessSrc) return null;
+            const src = __shipCompareRes.lessSrc;
+            const meta = src.meta || {};
+            const goodsLess = [], cardLess = [], removed = [], addrRows = [];
+            const personMap = new Map();
+            // 按「手机号 + 账号」建立人员临时档案，用于汇总待补发数量与地址核对标记
+            const touchPerson = function (label, acct, name) {
+                const k = String(label) + '|' + String(acct);
+                let pr = personMap.get(k);
+                if (!pr) {
+                    pr = { label: label, acct: acct, name: name || '', goodsQty: 0, goodsCnt: 0, cardQty: 0, cardCnt: 0, out: false, addrNeed: false };
+                    personMap.set(k, pr);
+                }
+                if (!pr.name && name) pr.name = name;
+                return pr;
+            };
+            // —— ② 商品少记待补发：只留差值 < 0；差值 > 0（多记）与 = 0（一致）直接丢弃 ——
+            (src.goodsCatRows || []).forEach(function (r) {
+                const diff = Number(r[6]) || 0;
+                if (diff >= 0) return;                 // 多记 / 持平：不进入对客清单
+                const need = -diff;                    // 待补发件数 = 平台 − 活动方
+                const label = r[0], acct = r[1], item = r[3];
+                const pr = touchPerson(label, acct, r[2]);
+                if (isUnshippedRow(label, acct)) {     // 命中未补邮名单：整人剔除，留痕到剔除台账
+                    pr.out = true;
+                    removed.push([label, acct, pr.name, '商品', item, r[4], r[5], need, '命中未补邮名单（整人剔除，不补发）']);
+                    return;
+                }
+                pr.goodsCnt++; pr.goodsQty += need;
+                goodsLess.push([label, acct, pr.name, item, r[4], r[5], diff, need, '活动方少记']);
+            });
+            // —— ③ 卡面少记待补发：同上，只留差值 < 0 ——
+            (src.cardBrandRows || []).forEach(function (r) {
+                const diff = Number(r[6]) || 0;
+                if (diff >= 0) return;
+                const need = -diff;
+                const label = r[0], acct = r[1], item = r[3];
+                const pr = touchPerson(label, acct, r[2]);
+                if (isUnshippedRow(label, acct)) {
+                    pr.out = true;
+                    removed.push([label, acct, pr.name, '卡面', item, r[4], r[5], need, '命中未补邮名单（整人剔除，不补发）']);
+                    return;
+                }
+                pr.cardCnt++; pr.cardQty += need;
+                cardLess.push([label, acct, pr.name, item, r[4], r[5], diff, need, '活动方少记']);
+            });
+            // —— ④ 收货地址需核对：只列「确有补发需求且地址不一致」的人（已被未补邮剔除者不发货，无需地址） ——
+            (src.infoDiffRows || []).forEach(function (r) {
+                if (String(r[2] || '').indexOf('地址') < 0) return;   // 姓名类差异属提示项，不进地址核对表
+                const pr = personMap.get(String(r[0]) + '|' + String(r[1]));
+                if (!pr || pr.out || pr.addrNeed) return;
+                if ((pr.goodsCnt + pr.cardCnt) === 0) return;
+                pr.addrNeed = true;
+                addrRows.push([pr.label, pr.acct, pr.name, r[3], r[4], '地址不一致，补发前需核对',
+                    '商品待补发 ' + pr.goodsQty + ' 件 / 卡面待补发 ' + pr.cardQty + ' 张']);
+            });
+            // 统一按手机号聚合排序，使同一人的明细连在一起，便于活动方逐人补发
+            const byLabel = function (a, b) {
+                return String(a[0]).localeCompare(String(b[0])) || String(a[3]).localeCompare(String(b[3]));
+            };
+            goodsLess.sort(byLabel); cardLess.sort(byLabel); removed.sort(byLabel); addrRows.sort(byLabel);
+
+            const sumGoodsQty = goodsLess.reduce(function (s, r) { return s + r[7]; }, 0);
+            const sumCardQty = cardLess.reduce(function (s, r) { return s + r[7]; }, 0);
+            const gPersons = new Set(goodsLess.map(function (r) { return r[0]; })).size;
+            const cPersons = new Set(cardLess.map(function (r) { return r[0]; })).size;
+            const outPersons = new Set(removed.map(function (r) { return r[0]; })).size;
+
+            // —— ① 一页看懂：指标 + 口径 + 按人汇总 ——
+            const headRows = [
+                ['导出时间', new Date().toLocaleString('zh-CN')],
+                ['平台数据来源', meta.platSrc || '—'],
+                ['归并口径', '以「收货手机号」为唯一归并键：同一手机号下多个下单账号的数量先合计再比对'],
+                ['核心口径', '差值 = 活动方数量 − 平台数量；只保留差值 < 0（活动方少记）的行；差值 ≥ 0（多记 / 持平）一律不导出'],
+                ['商品少记待补发', '涉及 ' + gPersons + ' 人 / ' + goodsLess.length + ' 条明细 / 待补发合计 ' + sumGoodsQty + ' 件'],
+                ['卡面少记待补发', '涉及 ' + cPersons + ' 人 / ' + cardLess.length + ' 条明细 / 待补发合计 ' + sumCardQty + ' 张'],
+                ['收货地址需核对', addrRows.length + ' 人（补发前请先核对地址，见页签④）'],
+                ['未补邮剔除', __unshippedList
+                    ? ('已上传「' + __unshippedList.fileName + '」：剔除 ' + outPersons + ' 人 / ' + removed.length + ' 条少记明细（明细见页签⑤）')
+                    : '未上传未补邮名单，本次未剔除未补邮（如需剔除，请在上方上传名单后重新导出）'],
+                ['集赞口径', '宣传集赞礼只做资格标记，不参与数量比对、不进入待补发，单列页签⑥说明'],
+                ['页签说明', '①一页看懂 ②商品少记待补发 ③卡面少记待补发 ④收货地址需核对 ⑤剔除台账 ⑥集赞口径说明'],
+                ['', ''],
+                ['以下为按人汇总（同一手机号的补发需求已合并）', '']
+            ];
+            const personRows = [];
+            personMap.forEach(function (pr) {
+                if ((pr.goodsCnt + pr.cardCnt) === 0) return;
+                const parts = ['商品 ' + pr.goodsQty + ' 件', '卡面 ' + pr.cardQty + ' 张'];
+                if (pr.addrNeed) parts.push('地址需核对');
+                if (pr.out) parts.push('已按未补邮剔除');
+                personRows.push([String(pr.label) + (pr.name ? ' / ' + pr.name : ''), parts.join('｜')]);
+            });
+            personRows.sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); });
+
+            // —— ⑤ 剔除台账：先写明未补邮名单状态，再逐条列出被剔除的少记明细 ——
+            const outRows = [];
+            if (!__unshippedList) {
+                outRows.push(['—', '—', '—', '说明', '未上传未补邮名单', '—', '—', '—', '本次未剔除未补邮，少记清单为全量口径']);
+            } else {
+                outRows.push(['—', '—', '—', '名单', __unshippedList.fileName,
+                    '手机号 ' + __unshippedList.phones.size + ' 个', '账号 ' + __unshippedList.accts.size + ' 个',
+                    removed.length, '共剔除 ' + outPersons + ' 人 / ' + removed.length + ' 条少记明细']);
+            }
+            removed.forEach(function (r) { outRows.push(r); });
+
+            // —— ⑥ 集赞口径说明：单列，不混进待补发 ——
+            const jizanRows = [
+                ['性质', '「宣传集赞礼」是「是否获得」的资格标记列，不是数量型商品'],
+                ['是否参与数量比对', '否。对比时已从商品分类中剔除，因此不会产生少记 / 多记，也不会进入待补发清单'],
+                ['平台侧集赞达标人数', (meta.jizanHolders || 0) + ' 人'],
+                ['平台侧集赞礼数量合计', (meta.jizanSum || 0) + ' 件'],
+                ['活动方侧', '活动方「物品统计」文本未列集赞礼，无法做数量比对；如需核对请以集赞台账为准'],
+                ['处理方式', '集赞相关差异单列本页说明，不混入「商品少记待补发」；集赞按台账单独兑付'],
+                ['本次少记清单是否含集赞', '否（集赞明细请使用集赞导入结果 / 集赞台账导出）']
+            ];
+
+            return [
+                { name: '①一页看懂', header: ['项目', '数值 / 说明'], rows: headRows.concat(personRows), widths: [32, 96] },
+                { name: '②商品少记待补发', header: ['收货手机号', '下单账号（可能多个）', '收货人姓名', '商品分类', '活动方数量', '平台数量', '差值(活动方-平台)', '待补发数量', '备注'], rows: goodsLess, widths: [14, 26, 12, 20, 12, 12, 18, 14, 18] },
+                { name: '③卡面少记待补发', header: ['收货手机号', '下单账号（可能多个）', '收货人姓名', '卡款', '活动方数量', '平台数量', '差值(活动方-平台)', '待补发张数', '备注'], rows: cardLess, widths: [14, 26, 12, 12, 12, 12, 18, 14, 18] },
+                { name: '④收货地址需核对', header: ['收货手机号', '下单账号（可能多个）', '收货人姓名', '活动方地址', '平台地址', '判定', '补发需求'], rows: addrRows, widths: [14, 26, 12, 42, 42, 26, 34] },
+                { name: '⑤剔除台账', header: ['收货手机号', '下单账号（可能多个）', '收货人姓名', '类型', '项目', '活动方数量', '平台数量', '待补发数量', '剔除原因 / 说明'], rows: outRows, widths: [14, 26, 12, 10, 24, 12, 12, 14, 40] },
+                { name: '⑥集赞口径说明', header: ['项目', '说明'], rows: jizanRows, widths: [24, 92] }
+            ];
+        }
+
+        // 导出「发货明细对客少记清单」多页签 xlsx（样式与「导出对比报告」保持一致）
+        async function exportShipLessListExcel() {
+            if (!__shipCompareRes) { alert('请先点「开始对比（站内查看）」生成对比结果，再导出对客少记清单'); return; }
+            if (typeof ExcelJS === 'undefined') { alert('ExcelJS 未加载，请联网后重试'); return; }
+            const btn = document.getElementById('shipLessExportBtn');
+            const tip = document.getElementById('shipLessExportTip');
+            const oldTxt = btn ? btn.textContent : '';
+            if (btn) { btn.textContent = '⏳ 导出中…'; btn.disabled = true; }
+            try {
+                const defs = buildShipLessSheets();
+                if (!defs) throw new Error('对比结果中缺少差异明细，请重新点「开始对比」后再导出');
+                __shipLessRes = defs;
+                const wb2 = new ExcelJS.Workbook();
+                const BD = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+                const BORDER = { top: BD, left: BD, bottom: BD, right: BD };
+                defs.forEach(function (s) {
+                    const nm = String(s.name).replace(/[\\\/\?\*\[\]:]/g, '-').slice(0, 31);
+                    const ws = wb2.addWorksheet(nm);
+                    ws.addRow(s.header);
+                    const hr = ws.getRow(1);
+                    hr.height = 24;
+                    hr.font = { bold: true, color: { argb: 'FF20517D' } };
+                    hr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF1F8' } };
+                    hr.eachCell(function (c) { c.border = BORDER; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
+                    s.rows.forEach(function (r) {
+                        const row = ws.addRow(r);
+                        row.eachCell(function (c) { c.border = BORDER; c.alignment = { vertical: 'middle', wrapText: true }; });
+                    });
+                    (s.widths || []).forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
+                    ws.views = [{ state: 'frozen', ySplit: 1 }];
+                });
+                const buffer = await wb2.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const aEl = document.createElement('a');
+                aEl.href = URL.createObjectURL(blob);
+                aEl.download = getTimestampFilename('发货明细对客少记清单');
+                aEl.click();
+                setTimeout(function () { URL.revokeObjectURL(aEl.href); }, 5000);
+                if (tip) {
+                    tip.textContent = '✅ 已导出：商品少记 ' + defs[1].rows.length + ' 条 / 卡面少记 ' + defs[2].rows.length
+                        + ' 条 / 地址需核对 ' + defs[3].rows.length + ' 人 / 剔除台账 ' + defs[4].rows.length + ' 行';
+                    tip.style.color = '#1f6fb2';
+                }
+            } catch (err) {
+                alert('导出失败：' + (err && err.message ? err.message : err));
+            } finally {
+                if (btn) { btn.textContent = oldTxt; btn.disabled = false; }
+            }
+        }
+
         document.getElementById('shipCompareBtn').addEventListener('click', exportShipCompareReport);
         document.getElementById('shipCompareExportBtn').addEventListener('click', exportShipCompareExcel);
+        // 对客少记清单：未补邮名单上传 / 清除 + 一键导出
+        document.getElementById('shipLessUnpaidInput').addEventListener('change', handleUnshippedListFile);
+        document.getElementById('shipLessUnpaidClearBtn').addEventListener('click', clearUnshippedList);
+        document.getElementById('shipLessExportBtn').addEventListener('click', exportShipLessListExcel);
 
         document.getElementById('shipMergeBtn').addEventListener('click', () => {
             const f = document.getElementById('shipMergeInput').files[0];
