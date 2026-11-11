@@ -214,8 +214,9 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px dashed #dbe4ee;">
                 <span style="font-size:13px;color:#20517d;font-weight:600;">🔍 与活动方发货明细对比</span>
                 <input type="file" id="shipCompareInput" accept=".xlsx,.xls,.csv">
-                <button class="btn" id="shipCompareBtn">生成对比报告</button>
-                <span style="font-size:12px;color:#999;">上传活动方手动制作的发货明细（如「发货明细1110版本」），按下单账号逐款比对卡面、商品与收货信息</span>
+                <button class="btn" id="shipCompareBtn">开始对比（站内查看）</button>
+                <button class="btn" id="shipCompareExportBtn" disabled style="background:#eef3f9;color:#20517d;">导出对比报告</button>
+                <span style="font-size:12px;color:#999;">上传活动方手动制作的发货明细（如「发货明细1110版本」），按下单账号逐款比对卡面、商品与收货信息；报告含「卡面差异-款式级明细」「商品差异-分类级明细」及按款按类汇总</span>
             </div>
             <div id="shipCompareResult" style="margin-top:8px;font-size:13px;color:#333;line-height:1.8;"></div>
             <label style="margin-top:10px;font-size:13px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
@@ -3285,6 +3286,9 @@ const GOODS_COLS = [
                 actList.forEach(a => { if (a.acct) actByAcct.set(a.acct, a); if (a.phone) actByPhone.set(a.phone, a); });
                 const usedAct = new Set();
                 const cardDiffRows = [], goodsDiffRows = [], infoDiffRows = [], onlyPlatRows = [];
+                // v1112 新增：款式级 / 分类级展开明细 + 按款按类聚合
+                const cardBrandRows = [], goodsCatRows = [];
+                const cardBrandAgg = new Map(), goodsCatAgg = new Map();
                 let cardBadCnt = 0, baseBadCnt = 0, goodsBadCnt = 0, infoBadCnt = 0, infoBadAcct = 0, absTotal = 0;
                 platList.forEach(p => {
                     const a = actByAcct.get(p.acct) || (p.phone ? actByPhone.get(p.phone) : null) || null;
@@ -3295,9 +3299,20 @@ const GOODS_COLS = [
                     Object.keys(a.cards).forEach(k => { aCards[String(k).toUpperCase()] = a.cards[k]; });
                     const nameSet = new Set(cardNames.concat(Object.keys(aCards)));
                     const parts = [];
+                    let brandDiffCnt = 0, brandActSum = 0, brandPlatSum = 0;
                     nameSet.forEach(n => {
                         const av = aCards[n] || 0, pv = p.cards[n] || 0;
-                        if (av !== pv) parts.push(n + '：活动方' + av + '/平台' + pv);
+                        if (av !== pv) {
+                            parts.push(n + '：活动方' + av + '/平台' + pv);
+                            brandDiffCnt++;
+                            brandActSum += av; brandPlatSum += pv;
+                            cardBrandRows.push([p.acct, p.name || a.name, p.phone, n, av, pv, av - pv,
+                                (av - pv) > 0 ? '活动方多记' : '活动方少记']);
+                            const ag = cardBrandAgg.get(n) || { cnt: 0, sum: 0, over: 0, less: 0 };
+                            ag.cnt++; ag.sum += (av - pv);
+                            if (av > pv) ag.over++; else ag.less++;
+                            cardBrandAgg.set(n, ag);
+                        }
                     });
                     const expBase = a.base || (a.cardSum + (a.duanhe ? 86 : 0));
                     const delta = expBase - p.totalWithBox;
@@ -3305,13 +3320,15 @@ const GOODS_COLS = [
                         cardBadCnt++;
                         if (delta !== 0) { baseBadCnt++; absTotal += Math.abs(delta); }
                         cardDiffRows.push([
-                            p.acct, p.name || a.name, expBase, a.cardSum, p.totalWithBox, delta,
+                            p.acct, p.name || a.name, p.phone, expBase, a.cardSum, p.totalWithBox, delta,
+                            brandDiffCnt, brandActSum, brandPlatSum,
                             a.duanhe ? '是' : '否', p.duanhe ? '是' : '否',
                             parts.join('；') || (delta !== 0 ? '逐款卡面一致，仅合计不一致（请核对端盒/补邮口径）' : '合计一致，逐款分布不同')
                         ]);
                     }
                     // 3.2 商品
                     const gParts = [];
+                    let gActSum = 0, gPlatSum = 0;
                     const gkeys = new Set(Object.keys(p.goods).concat(Object.keys(a.goods)));
                     GOODS_COLS.forEach(g => gkeys.add(g.key));
                     gkeys.forEach(k => {
@@ -3319,9 +3336,19 @@ const GOODS_COLS = [
                         if (av !== pv) {
                             const nm = (GOODS_COLS.find(g => g.key === k) || { name: k }).name;
                             gParts.push(nm + '：活动方' + av + '/平台' + pv);
+                            gActSum += av; gPlatSum += pv;
+                            goodsCatRows.push([p.acct, p.name || a.name, p.phone, nm, av, pv, av - pv,
+                                (av - pv) > 0 ? '活动方多记' : '活动方少记']);
+                            const ag = goodsCatAgg.get(nm) || { cnt: 0, sum: 0, over: 0, less: 0 };
+                            ag.cnt++; ag.sum += (av - pv);
+                            if (av > pv) ag.over++; else ag.less++;
+                            goodsCatAgg.set(nm, ag);
                         }
                     });
-                    if (gParts.length) { goodsBadCnt++; goodsDiffRows.push([p.acct, p.name || a.name, gParts.join('；')]); }
+                    if (gParts.length) {
+                        goodsBadCnt++;
+                        goodsDiffRows.push([p.acct, p.name || a.name, p.phone, gParts.length, gActSum, gPlatSum, gPlatSum - gActSum, gParts.join('；')]);
+                    }
                     // 3.3 收货信息
                     let acctBad = false;
                     [['收货人姓名', a.name, p.name], ['收货人手机号', a.phone, p.phone], ['收货地址', a.addr, p.addr]].forEach(t => {
@@ -3331,25 +3358,10 @@ const GOODS_COLS = [
                 });
                 const onlyActRows = actList.filter(a => !usedAct.has(a))
                     .map(a => [a.acct, a.name, a.phone, a.base || (a.cardSum + (a.duanhe ? 86 : 0))]);
-                // 4) 生成报告
-                const wb2 = new ExcelJS.Workbook();
-                const BD = { style: 'thin', color: { argb: 'FFBFBFBF' } };
-                const BORDER = { top: BD, left: BD, bottom: BD, right: BD };
+                // 4) 汇总为页签数据（网页展示与导出共用）
+                const sheetsDef = [];
                 const addSheet = (name, header, dataRows, widths) => {
-                    const ws = wb2.addWorksheet(name);
-                    ws.addRow(header);
-                    const hr = ws.getRow(1);
-                    hr.height = 24;
-                    hr.font = { bold: true, color: { argb: 'FF20517D' } };
-                    hr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF1F8' } };
-                    hr.eachCell(c => { c.border = BORDER; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
-                    dataRows.forEach(r => {
-                        const row = ws.addRow(r);
-                        row.eachCell(c => { c.border = BORDER; c.alignment = { vertical: 'middle', wrapText: true }; });
-                    });
-                    (widths || []).forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-                    ws.views = [{ state: 'frozen', ySplit: 1 }];
-                    return ws;
+                    sheetsDef.push({ name: name, header: header, rows: dataRows || [], widths: widths || [] });
                 };
                 const summary = [
                     ['平台账号数（订单分析结果）', platList.length],
@@ -3367,31 +3379,51 @@ const GOODS_COLS = [
                     ['对比口径说明', '卡面按款比对；商品按 19 类比对；活动方「全员满赠(3张)」「10抽全员特典(9张)」为固定赠品，平台发货明细无对应列，不参与对比'],
                     ['端盒口径说明', '平台卡面合计已按端盒 +86 张对齐，与活动方「基础小卡张数」口径一致；两列端盒标记并列展示便于核对'],
                     ['收货信息比对规则', '手机号仅比对数字；地址忽略空格/大小写并折叠重复前缀，一方为另一方的完整子串视为一致（降低平台地址重复拼接造成的误报）'],
+                    ['款式级明细说明', '「卡面差异-款式级明细」「商品差异-分类级明细」按 账号×单款/单类 逐条展开（仅列有差异的项），可直接筛选/透视/按款排序；「按款式汇总」「按分类汇总」给出每款每类的涉及账号数与差值合计，便于定位集中出错项'],
                     ['生成时间', new Date().toLocaleString('zh-CN')]
                 ];
                 addSheet('对比总览', ['指标', '数值'], summary, [36, 80]);
+                // v1112：按款 / 按类聚合，供汇总页签使用
+                const cardBrandAggRows = Array.from(cardBrandAgg.entries())
+                    .map(([n, v]) => [n, v.cnt, v.over, v.less, v.sum])
+                    .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+                const goodsCatAggRows = Array.from(goodsCatAgg.entries())
+                    .map(([n, v]) => [n, v.cnt, v.over, v.less, v.sum])
+                    .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+                cardBrandRows.sort((x, y) => String(x[0]).localeCompare(String(y[0])) || x[3].localeCompare(y[3]));
+                goodsCatRows.sort((x, y) => String(x[0]).localeCompare(String(y[0])) || x[3].localeCompare(y[3]));
                 addSheet('卡面差异',
-                    ['下单账号', '收货人姓名', '活动方基础小卡张数', '活动方卡面合计(不含端盒86)', '平台卡面合计(含端盒86)', '合计差值(活动方-平台)', '活动方端盒', '平台端盒', '逐款差异明细（活动方/平台）'],
-                    cardDiffRows, [16, 12, 16, 20, 20, 18, 10, 10, 90]);
-                addSheet('商品差异', ['下单账号', '收货人姓名', '逐款差异明细（活动方/平台）'], goodsDiffRows, [16, 12, 110]);
+                    ['下单账号', '收货人姓名', '收货人手机号', '活动方基础小卡张数', '活动方卡面合计(不含端盒86)', '平台卡面合计(含端盒86)', '合计差值(活动方-平台)', '差异款数', '差异款-活动方张数', '差异款-平台张数', '活动方端盒', '平台端盒', '逐款差异明细（活动方/平台）'],
+                    cardDiffRows, [16, 12, 14, 16, 20, 20, 18, 10, 14, 14, 10, 10, 90]);
+                addSheet('卡面差异-按款式汇总',
+                    ['卡款', '涉及账号数', '活动方多记账号数', '活动方少记账号数', '差值合计(活动方-平台)'],
+                    cardBrandAggRows, [12, 14, 18, 18, 20]);
+                addSheet('卡面差异-款式级明细',
+                    ['下单账号', '收货人姓名', '收货人手机号', '卡款', '活动方数量', '平台数量', '差值(活动方-平台)', '差异方向'],
+                    cardBrandRows, [16, 12, 14, 10, 12, 12, 18, 14]);
+                addSheet('商品差异',
+                    ['下单账号', '收货人姓名', '收货人手机号', '差异类数', '差异类-活动方张数', '差异类-平台张数', '差值(平台-活动方)', '逐类差异明细（活动方/平台）'],
+                    goodsDiffRows, [16, 12, 14, 10, 16, 16, 18, 110]);
+                addSheet('商品差异-按分类汇总',
+                    ['商品分类', '涉及账号数', '活动方多记账号数', '活动方少记账号数', '差值合计(活动方-平台)'],
+                    goodsCatAggRows, [24, 14, 18, 18, 20]);
+                addSheet('商品差异-分类级明细',
+                    ['下单账号', '收货人姓名', '收货人手机号', '商品分类', '活动方数量', '平台数量', '差值(活动方-平台)', '差异方向'],
+                    goodsCatRows, [16, 12, 14, 24, 12, 12, 18, 14]);
                 addSheet('收货信息差异', ['下单账号', '字段', '活动方', '平台'], infoDiffRows, [16, 14, 40, 40]);
                 addSheet('仅平台有', ['下单账号', '收货人姓名', '手机号', '平台卡面合计', '平台端盒'], onlyPlatRows, [16, 12, 14, 14, 10]);
                 addSheet('仅活动方有', ['下单账号', '收货人姓名', '手机号', '活动方基础小卡张数'], onlyActRows, [16, 12, 14, 18]);
-                const buffer = await wb2.xlsx.writeBuffer();
-                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                const aEl = document.createElement('a');
-                aEl.href = URL.createObjectURL(blob);
-                aEl.download = getTimestampFilename('发货明细对比报告');
-                aEl.click();
-                setTimeout(() => URL.revokeObjectURL(aEl.href), 5000);
-                const box = document.getElementById('shipCompareResult');
-                if (box) {
-                    box.innerHTML = '✅ 对比完成：平台 <b>' + platList.length + '</b> 个账号 / 活动方 <b>' + actList.length + '</b> 个账号，匹配 <b>' + usedAct.size + '</b> 个<br>'
-                        + '卡面不一致 <b style="color:#c0392b;">' + cardBadCnt + '</b> 个（合计张数不一致 ' + baseBadCnt + '，绝对差累计 ' + absTotal + ' 张）｜'
-                        + '商品不一致 <b style="color:#c0392b;">' + goodsBadCnt + '</b> 个｜'
-                        + '收货信息不一致 <b style="color:#c0392b;">' + infoBadCnt + '</b> 条｜'
-                        + '仅平台有 <b>' + onlyPlatRows.length + '</b> 个｜仅活动方有 <b>' + onlyActRows.length + '</b> 个';
-                }
+                // 5) 站内展示（不自动下载）
+                __shipCompareRes = {
+                    sheets: sheetsDef,
+                    stat: {
+                        platCnt: platList.length, actCnt: actList.length, matched: usedAct.size,
+                        cardBad: cardBadCnt, baseBad: baseBadCnt, absTotal: absTotal,
+                        goodsBad: goodsBadCnt, infoBad: infoBadCnt,
+                        onlyPlat: onlyPlatRows.length, onlyAct: onlyActRows.length
+                    }
+                };
+                renderShipCompareUI(__shipCompareRes);
             } catch (err) {
                 alert('对比失败：' + (err && err.message ? err.message : err));
             } finally {
@@ -3399,7 +3431,122 @@ const GOODS_COLS = [
             }
         }
 
+        let __shipCompareRes = null;
+        let __scIdx = 0, __scPage = 0;
+
+        function renderShipCompareUI(res) {
+            const box = document.getElementById('shipCompareResult');
+            if (!box) return;
+            const st = res.stat;
+            const expBtn = document.getElementById('shipCompareExportBtn');
+            if (expBtn) { expBtn.disabled = false; expBtn.style.display = 'inline-block'; }
+            let html = '<div style="padding:10px 12px;background:#f4f8fc;border:1px solid #dbe4ee;border-radius:8px;margin-bottom:10px;line-height:1.9;">'
+                + '✅ 对比完成：平台 <b>' + st.platCnt + '</b> 个账号 / 活动方 <b>' + st.actCnt + '</b> 个账号，匹配 <b>' + st.matched + '</b> 个　'
+                + '卡面不一致 <b style="color:#c0392b;">' + st.cardBad + '</b> 个（合计张数不一致 ' + st.baseBad + '，绝对差累计 ' + st.absTotal + ' 张）'
+                + '｜商品不一致 <b style="color:#c0392b;">' + st.goodsBad + '</b> 个'
+                + '｜收货信息不一致 <b style="color:#c0392b;">' + st.infoBad + '</b> 条'
+                + '｜仅平台有 <b>' + st.onlyPlat + '</b> 个｜仅活动方有 <b>' + st.onlyAct + '</b> 个'
+                + '<br><span style="color:#888;">下方按页签查看明细，需要留档或发给同事可点「导出对比报告」下载 Excel。</span></div>';
+            html += '<div id="scTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>';
+            html += '<div id="scTableWrap"></div>';
+            box.innerHTML = html;
+            const tabs = document.getElementById('scTabs');
+            res.sheets.forEach((s, i) => {
+                const b = document.createElement('button');
+                b.className = 'btn';
+                b.textContent = s.name + '（' + s.rows.length + '）';
+                b.style.cssText = 'padding:4px 10px;font-size:12px;' + (i === 0 ? '' : 'background:#eef3f9;color:#20517d;');
+                b.onclick = () => {
+                    Array.prototype.forEach.call(tabs.children, (c, j) => {
+                        c.style.background = (j === i) ? '' : '#eef3f9';
+                        c.style.color = (j === i) ? '' : '#20517d';
+                    });
+                    renderShipCompareTable(i, 0);
+                };
+                tabs.appendChild(b);
+            });
+            renderShipCompareTable(0, 0);
+        }
+
+        function renderShipCompareTable(idx, page) {
+            if (!__shipCompareRes) return;
+            const s = __shipCompareRes.sheets[idx];
+            if (!s) return;
+            __scIdx = idx;
+            const PS = 100;
+            const total = s.rows.length;
+            const pages = Math.max(1, Math.ceil(total / PS));
+            page = Math.min(Math.max(0, page || 0), pages - 1);
+            __scPage = page;
+            const rows = s.rows.slice(page * PS, page * PS + PS);
+            const wrap = document.getElementById('scTableWrap');
+            let html = '<div style="max-height:540px;overflow:auto;border:1px solid #dbe4ee;border-radius:8px;background:#fff;">'
+                + '<table style="border-collapse:collapse;font-size:12px;white-space:nowrap;">';
+            html += '<thead><tr>' + s.header.map(h => '<th style="position:sticky;top:0;z-index:2;background:#eaf1f8;color:#20517d;border:1px solid #dbe4ee;padding:6px 8px;text-align:left;">' + escHtml(h) + '</th>').join('') + '</tr></thead><tbody>';
+            if (!rows.length) {
+                html += '<tr><td colspan="' + s.header.length + '" style="padding:16px;text-align:center;color:#888;">无差异记录</td></tr>';
+            } else {
+                rows.forEach(r => {
+                    html += '<tr>' + s.header.map((_, j) => {
+                        const v = (r[j] === undefined || r[j] === null) ? '' : r[j];
+                        return '<td style="border:1px solid #eef2f7;padding:5px 8px;max-width:520px;white-space:normal;">' + escHtml(v) + '</td>';
+                    }).join('') + '</tr>';
+                });
+            }
+            html += '</tbody></table></div>';
+            if (pages > 1) {
+                html += '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;font-size:12px;color:#555;">'
+                    + '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',' + (page - 1) + ')">上一页</button>'
+                    + '<span>第 ' + (page + 1) + ' / ' + pages + ' 页（共 ' + total + ' 行）</span>'
+                    + '<button class="btn" style="padding:3px 10px;" onclick="renderShipCompareTable(' + idx + ',' + (page + 1) + ')">下一页</button></div>';
+            } else {
+                html += '<div style="margin-top:6px;font-size:12px;color:#888;">共 ' + total + ' 行</div>';
+            }
+            wrap.innerHTML = html;
+        }
+
+        async function exportShipCompareExcel() {
+            if (!__shipCompareRes) { alert('请先点「开始对比」生成结果'); return; }
+            if (typeof ExcelJS === 'undefined') { alert('ExcelJS 未加载，请联网后重试'); return; }
+            const btn = document.getElementById('shipCompareExportBtn');
+            const oldTxt = btn ? btn.textContent : '';
+            if (btn) { btn.textContent = '⏳ 导出中…'; btn.disabled = true; }
+            try {
+                const wb2 = new ExcelJS.Workbook();
+                const BD = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+                const BORDER = { top: BD, left: BD, bottom: BD, right: BD };
+                __shipCompareRes.sheets.forEach(s => {
+                    let nm = String(s.name).replace(/[\\\/\?\*\[\]:]/g, '-').slice(0, 31);
+                    const ws = wb2.addWorksheet(nm);
+                    ws.addRow(s.header);
+                    const hr = ws.getRow(1);
+                    hr.height = 24;
+                    hr.font = { bold: true, color: { argb: 'FF20517D' } };
+                    hr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF1F8' } };
+                    hr.eachCell(c => { c.border = BORDER; c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }; });
+                    s.rows.forEach(r => {
+                        const row = ws.addRow(r);
+                        row.eachCell(c => { c.border = BORDER; c.alignment = { vertical: 'middle', wrapText: true }; });
+                    });
+                    (s.widths || []).forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+                    ws.views = [{ state: 'frozen', ySplit: 1 }];
+                });
+                const buffer = await wb2.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const aEl = document.createElement('a');
+                aEl.href = URL.createObjectURL(blob);
+                aEl.download = getTimestampFilename('发货明细对比报告');
+                aEl.click();
+                setTimeout(() => URL.revokeObjectURL(aEl.href), 5000);
+            } catch (err) {
+                alert('导出失败：' + (err && err.message ? err.message : err));
+            } finally {
+                if (btn) { btn.textContent = oldTxt; btn.disabled = false; }
+            }
+        }
+
         document.getElementById('shipCompareBtn').addEventListener('click', exportShipCompareReport);
+        document.getElementById('shipCompareExportBtn').addEventListener('click', exportShipCompareExcel);
 
         document.getElementById('shipMergeBtn').addEventListener('click', () => {
             const f = document.getElementById('shipMergeInput').files[0];
