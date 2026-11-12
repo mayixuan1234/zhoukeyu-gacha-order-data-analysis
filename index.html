@@ -577,6 +577,37 @@
                 </div>
             </div>
 
+            <!-- 聚合1004查询表导出：跑完订单+三活动表后，用1004基准（含客服反馈更正）覆盖，输出最终对客查询表 -->
+            <div class="table-section" id="agg1004Section">
+                <div class="table-header">
+                    <h3>🧩 聚合1004查询表（最终版导出）</h3>
+                    <div>
+                        <button class="btn btn-sm" onclick="exportAgg1004Query()" title="导出最终查询表：以网站全流程计算结果（含碎卡/集赞/超like）为底，再用上传的1004基准表覆盖客服已更正的地方">📥 导出聚合1004查询表</button>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:#f4f8fc;border:1px solid #dbe4ee;border-radius:8px;">
+                    <span style="font-size:13px;color:#20517d;font-weight:600;">📤 1004基准覆盖表（可选）</span>
+                    <label style="font-size:12px;color:#555;">上传 ccl查询1004版：</label>
+                    <input type="file" id="agg1004Input" accept=".xlsx,.xls,.csv">
+                    <button class="btn" id="agg1004ClearBtn" style="background:#eef3f9;color:#20517d;" title="清除已上传的1004基准表，恢复纯网站计算口径">清除1004表</button>
+                    <span id="agg1004Status" style="font-size:12px;color:#888;">未上传1004基准表（导出即网站全流程计算结果，与来豹接龙查询表一致）</span>
+                </div>
+                <div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+                    <label style="font-size:12px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="aggAddSourceCb" checked style="accent-color:#20517d;"> 加「数据来源」列
+                    </label>
+                    <label style="font-size:12px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="aggKeepOnly1004Cb" checked style="accent-color:#20517d;"> 保留仅1004有的账号行
+                    </label>
+                    <label style="font-size:12px;color:#555;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="aggKeepQAColCb" checked style="accent-color:#20517d;"> 追加「问卷反馈」列（来自1004）
+                    </label>
+                </div>
+                <div style="font-size:12px;color:#888;margin-top:6px;line-height:1.7;">
+                    覆盖口径：按下单账号匹配（同一格内多个账号用「；」拆开逐个匹配），1004 有值即覆盖网站算出的值；1004 为空白或「/」时保留网站值。导出含「聚合查询表」「覆盖差异」「汇总说明」三个 Sheet，每一处改动都可追溯。使用顺序：① 上传六份原始订单并「开始分析」→ ② 依次上传碎卡兑换、集赞兑换、超like兑换三张表并处理 → ③（可选）上传1004基准表 → ④ 点本区块导出按钮。
+                </div>
+            </div>
+
             <div class="table-section">
                 <div id="userDetailPanel" class="hidden" style="padding: 16px 20px; margin-bottom: 14px; border-radius: 12px; background: linear-gradient(135deg, #f0f7ff, #fff8e8); border: 1px solid #dce8f5;"></div>
                 <div class="table-header">
@@ -7972,6 +8003,289 @@ const GOODS_COLS = [
                 }
             }
         }
+
+        // ==================== 聚合1004查询表导出 ====================
+        // 定位：六份原始订单「开始分析」+ 三份活动表（碎卡兑换/集赞兑换/超like兑换）处理完成后，
+        // 以 exportLaibaoSheet() 的 21 列为底表，再用上传的「ccl查询1004版」（客服已更正过的版本）覆盖，
+        // 输出最终对客查询表；同时输出覆盖差异台账，保证每处改动可追溯。
+        let agg1004Data = null; // { headers:[], rows:[[]], fileName, sheetName }
+
+        // 1004 表与网站来豹表的列名差异（左：1004 列名，右：底表列名）
+        const AGG_1004_ALIAS = { '个人满赠': '个人满抽礼' };
+
+        function aggCell(v) {
+            if (v === null || v === undefined) return '';
+            return String(v).replace(/\r/g, '').trim();
+        }
+        function aggIsBlank(v) {
+            const s = aggCell(v);
+            return !s || s === '/' || s === '-' || s === '—' || s === '无';
+        }
+        // 去掉列名中的括号补充说明，便于宽松匹配
+        function aggColKey(name) {
+            return aggCell(name).replace(/[（(][^）)]*[)）]/g, '').trim();
+        }
+
+        function clearAgg1004() {
+            agg1004Data = null;
+            const input = document.getElementById('agg1004Input');
+            if (input) input.value = '';
+            const st = document.getElementById('agg1004Status');
+            if (st) {
+                st.textContent = '未上传1004基准表（导出即网站全流程计算结果，与来豹接龙查询表一致）';
+                st.style.color = '#888';
+            }
+        }
+
+        function handleAgg1004File(e) {
+            const f = e && e.target && e.target.files && e.target.files[0];
+            if (!f) return;
+            const st = document.getElementById('agg1004Status');
+            if (st) { st.textContent = '正在读取 ' + f.name + ' …'; st.style.color = '#888'; }
+            const reader = new FileReader();
+            reader.onload = ev => {
+                try {
+                    const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    const sheetName = wb.SheetNames[0];
+                    const ws = wb.Sheets[sheetName];
+                    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+                    // 表头行探测：前 10 行内包含「下单账号」或「查询码」的行
+                    let hi = -1;
+                    for (let i = 0; i < Math.min(aoa.length, 10); i++) {
+                        const line = (aoa[i] || []).map(aggCell).join('|');
+                        if (line.indexOf('下单账号') >= 0 || line.indexOf('查询码') >= 0) { hi = i; break; }
+                    }
+                    if (hi < 0) {
+                        agg1004Data = null;
+                        if (st) { st.textContent = '读取失败：未找到含「下单账号／查询码」的表头行'; st.style.color = '#c0392b'; }
+                        alert('1004 基准表读取失败：未在前 10 行找到表头（需含「下单账号」或「查询码」列）。');
+                        return;
+                    }
+                    const headers = (aoa[hi] || []).map(aggCell);
+                    const rows = aoa.slice(hi + 1).filter(r => Array.isArray(r) && r.some(c => !aggIsBlank(c)));
+                    if (!rows.length) {
+                        agg1004Data = null;
+                        if (st) { st.textContent = '读取失败：表格为空'; st.style.color = '#c0392b'; }
+                        alert('1004 基准表没有数据行。');
+                        return;
+                    }
+                    agg1004Data = { headers, rows, fileName: f.name, sheetName };
+                    if (st) {
+                        st.textContent = '已载入 1004 基准：' + f.name + '（工作表 ' + sheetName + '，' + rows.length + ' 行，' + headers.length + ' 列）';
+                        st.style.color = '#059669';
+                    }
+                } catch (err) {
+                    agg1004Data = null;
+                    if (st) { st.textContent = '读取失败：' + (err && err.message ? err.message : err); st.style.color = '#c0392b'; }
+                    alert('1004 基准表读取失败：' + (err && err.message ? err.message : err));
+                }
+            };
+            reader.onerror = () => {
+                agg1004Data = null;
+                if (st) { st.textContent = '读取失败：文件无法读取'; st.style.color = '#c0392b'; }
+            };
+            reader.readAsArrayBuffer(f);
+        }
+
+        // 建立 1004 索引：下单账号 / 查询码 / 手机号 三套键
+        function agg1004Index() {
+            const idx = { byAcct: {}, byCode: {}, byPhone: {}, cAcct: -1, cCode: -1, cPhone: -1, cQA: -1 };
+            if (!agg1004Data) return idx;
+            const headers = agg1004Data.headers;
+            const findCol = names => {
+                for (const n of names) {
+                    const i = headers.findIndex(h => aggColKey(h) === n);
+                    if (i >= 0) return i;
+                }
+                return -1;
+            };
+            idx.cAcct = findCol(['下单账号']);
+            idx.cCode = findCol(['查询码', '查询码(下单账号)']);
+            idx.cPhone = findCol(['收货人手机号', '手机号']);
+            idx.cQA = findCol(['问卷反馈', '客服反馈', '信息更正']);
+            agg1004Data.rows.forEach((r, i) => {
+                const acct = aggCell(r[idx.cAcct]);
+                const code = aggCell(r[idx.cCode]);
+                const phone = aggCell(r[idx.cPhone]).replace(/\D/g, '');
+                if (acct) (idx.byAcct[acct] = idx.byAcct[acct] || []).push(i);
+                if (code) (idx.byCode[code] = idx.byCode[code] || []).push(i);
+                if (phone) (idx.byPhone[phone] = idx.byPhone[phone] || []).push(i);
+            });
+            return idx;
+        }
+
+        // 找底表某行对应的 1004 行：按账号 → 查询码 → 手机号 逐级匹配（多个候选时取第一行并标记歧义）
+        function aggFind1004Row(idx, acctCell, phoneCell) {
+            if (!agg1004Data) return { row: -1, by: '' };
+            const accts = aggCell(acctCell).split(/[；;、,，\/]/).map(x => x.trim()).filter(Boolean);
+            for (const a of accts) {
+                const hit = idx.byAcct[a];
+                if (hit && hit.length) return { row: hit[0], by: hit.length > 1 ? '下单账号(重复' + hit.length + '行)' : '下单账号' };
+            }
+            for (const a of accts) {
+                const hit = idx.byCode[a];
+                if (hit && hit.length) return { row: hit[0], by: '查询码' };
+            }
+            const p = aggCell(phoneCell).replace(/\D/g, '');
+            if (p) {
+                const hit = idx.byPhone[p];
+                if (hit && hit.length) return { row: hit[0], by: hit.length > 1 ? '手机号(同号' + hit.length + '行)' : '手机号' };
+            }
+            return { row: -1, by: '' };
+        }
+
+        async function exportAgg1004Query() {
+            if (!userData || userData.length === 0) {
+                alert('还没有可导出的数据。\n请先上传六份原始订单数据并点击「开始分析」，再按顺序上传碎卡兑换、集赞兑换、超like兑换三张活动表后导出。');
+                return;
+            }
+            const addSourceCol = !!(document.getElementById('aggAddSourceCb') || {}).checked;
+            const keepOnly1004Row = !!(document.getElementById('aggKeepOnly1004Cb') || {}).checked;
+            const keepQACol = !!(document.getElementById('aggKeepQAColCb') || {}).checked;
+
+            // 1) 底表：网站全流程计算结果（与来豹接龙查询表完全同源）
+            const baseSheet = exportLaibaoSheet();
+            const aoaBase = XLSX.utils.sheet_to_json(baseSheet, { header: 1, defval: '', raw: false });
+            const baseHeaders = (aoaBase[0] || []).map(aggCell);
+            const baseRows = aoaBase.slice(1);
+            const h2i = {};
+            baseHeaders.forEach((h, i) => { h2i[h] = i; });
+            const iAcct = h2i['下单账号'] !== undefined ? h2i['下单账号'] : 1;
+            const iPhone = h2i['收货人手机号'] !== undefined ? h2i['收货人手机号'] : 2;
+
+            // 2) 1004 ↔ 底表 列映射（按列名匹配，1004 独有列单独收）
+            const idx = agg1004Index();
+            const use1004 = !!agg1004Data;
+            const colMap = {};   // 1004列索引 -> 底表列索引
+            const extraCols = []; // 1004独有列 {ci, name}
+            if (use1004) {
+                agg1004Data.headers.forEach((h, ci) => {
+                    const key = aggColKey(h);
+                    if (!key) return;
+                    const target = AGG_1004_ALIAS[key] || key;
+                    const baseHit = baseHeaders.findIndex(bh => aggColKey(bh) === target);
+                    if (baseHit >= 0) colMap[ci] = baseHit;
+                    else extraCols.push({ ci, name: key });
+                });
+            }
+
+            // 3) 逐行覆盖
+            const outRows = [];
+            const diffs = [];      // [下单账号, 列名, 覆盖前, 覆盖后, 匹配方式]
+            const used1004Row = {};
+            let hitRows = 0;
+            baseRows.forEach(row => {
+                const acct = aggCell(row[iAcct]);
+                const phone = aggCell(row[iPhone]);
+                const out = row.slice();
+                while (out.length < baseHeaders.length) out.push('');
+                let source = '网站计算';
+                let qaVal = '';
+                if (use1004) {
+                    const m = aggFind1004Row(idx, acct, phone);
+                    if (m.row >= 0) {
+                        hitRows++;
+                        used1004Row[m.row] = true;
+                        const r1004 = agg1004Data.rows[m.row] || [];
+                        let changed = 0;
+                        Object.keys(colMap).forEach(ciStr => {
+                            const ci = Number(ciStr);
+                            const baseCol = colMap[ci];
+                            const nv = r1004[ci];
+                            const ov = out[baseCol];
+                            if (aggIsBlank(nv)) return;                       // 1004 空值不覆盖
+                            if (aggCell(nv) === aggCell(ov)) return;          // 相同不记差异
+                            out[baseCol] = nv;
+                            changed++;
+                            diffs.push([acct, baseHeaders[baseCol], aggCell(ov), aggCell(nv), m.by]);
+                        });
+                        if (idx.cQA >= 0) qaVal = aggCell(r1004[idx.cQA]);
+                        source = changed > 0 ? '1004覆盖(' + changed + '列)' : '1004已核对·无差异';
+                        if (m.by && m.by.indexOf('重复') >= 0) source += '｜匹配有歧义，请复核';
+                    } else {
+                        source = '仅网站计算（1004无此账号）';
+                    }
+                }
+                if (addSourceCol) out.push(source);
+                if (keepQACol) out.push(qaVal);
+                outRows.push(out);
+            });
+
+            // 4) 仅 1004 有的账号行（网站算不出来但 1004 有，确保不丢人）
+            let appended = 0;
+            if (use1004 && keepOnly1004Row) {
+                agg1004Data.rows.forEach((r1004, ri) => {
+                    if (used1004Row[ri]) return;
+                    const row = new Array(baseHeaders.length).fill('');
+                    Object.keys(colMap).forEach(ciStr => {
+                        const ci = Number(ciStr);
+                        row[colMap[ci]] = aggCell(r1004[ci]);
+                    });
+                    if (!aggCell(row[iAcct])) row[iAcct] = aggCell(r1004[idx.cAcct >= 0 ? idx.cAcct : 1]);
+                    if (!aggCell(row[0])) row[0] = row[iAcct];
+                    if (!aggCell(row[iPhone]) && idx.cPhone >= 0) row[iPhone] = aggCell(r1004[idx.cPhone]);
+                    if (addSourceCol) row.push('仅1004有（网站无此账号）');
+                    if (keepQACol) row.push(idx.cQA >= 0 ? aggCell(r1004[idx.cQA]) : '');
+                    outRows.push(row);
+                    appended++;
+                });
+            }
+
+            // 5) 输出三个 Sheet
+            const finalHeaders = baseHeaders.slice();
+            if (addSourceCol) finalHeaders.push('数据来源');
+            if (keepQACol) finalHeaders.push('问卷反馈');
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet([finalHeaders, ...outRows]);
+            ws['!cols'] = finalHeaders.map(h => {
+                if (h === '获得卡片' || h === '审核原因明细') return { wch: 46 };
+                if (h === '备注' || h === '数据来源' || h === '问卷反馈') return { wch: 34 };
+                if (h === '下单账号' || h === '查询码(下单账号)') return { wch: 22 };
+                if (h === '个人满抽礼' || h === '终极活动获得') return { wch: 26 };
+                return { wch: 15 };
+            });
+            XLSX.utils.book_append_sheet(wb, ws, '聚合查询表');
+
+            const wsDiff = XLSX.utils.aoa_to_sheet([
+                ['下单账号', '被覆盖的列', '覆盖前（网站计算）', '覆盖后（1004基准）', '匹配方式'],
+                ...diffs
+            ]);
+            wsDiff['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 40 }, { wch: 40 }, { wch: 22 }];
+            XLSX.utils.book_append_sheet(wb, wsDiff, '覆盖差异');
+
+            const wsSum = XLSX.utils.aoa_to_sheet([
+                ['项目', '数值／说明'],
+                ['导出时间', new Date().toLocaleString('zh-CN')],
+                ['底表来源', '网站全流程计算结果（六份原始订单 + 碎卡/集赞/超like 三张活动表）'],
+                ['底表行数（网站账号数）', baseRows.length],
+                ['1004基准表', use1004 ? (agg1004Data.fileName + '（工作表 ' + agg1004Data.sheetName + '，' + agg1004Data.rows.length + ' 行）') : '未上传（本次为纯网站计算口径）'],
+                ['已被1004匹配到的网站行数', hitRows],
+                ['仅1004有、网站无的新增行数', appended],
+                ['被覆盖的单元格条数', diffs.length],
+                ['最终输出行数', outRows.length],
+                ['覆盖口径', '按下单账号 → 查询码 → 手机号 逐级匹配；1004 有值即覆盖，空白或「/」保留网站值'],
+                ['说明', '「覆盖差异」Sheet 逐条列明每处改动的前后值，可用于核对客服反馈是否已全部落地']
+            ]);
+            wsSum['!cols'] = [{ wch: 28 }, { wch: 80 }];
+            XLSX.utils.book_append_sheet(wb, wsSum, '汇总说明');
+
+            XLSX.writeFile(wb, getTimestampFilename('聚合1004查询表'));
+
+            const st = document.getElementById('agg1004Status');
+            if (st) {
+                st.textContent = '已导出：共 ' + outRows.length + ' 行；1004 匹配 ' + hitRows + ' 行，覆盖 ' + diffs.length + ' 处，仅1004新增 ' + appended + ' 行';
+                st.style.color = '#059669';
+            }
+        }
+
+        // 事件绑定（脚本位于 body 末尾，DOM 已就绪）
+        (function initAgg1004UI() {
+            const input = document.getElementById('agg1004Input');
+            if (input) input.addEventListener('change', handleAgg1004File);
+            const clr = document.getElementById('agg1004ClearBtn');
+            if (clr) clr.addEventListener('click', clearAgg1004);
+        })();
 
         cloudInit();
     </script>
