@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>抽抽乐活动数据审核 最后更新时间2026.10.10 16：11</title>
+    <title>抽抽乐活动数据审核 最后更新时间2026.11.12 13：11</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
@@ -152,7 +152,7 @@
     <div class="container">
         <div class="header">
             <h1>📋 抽抽乐活动数据审核</h1>
-            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.10.10 16：11</div>
+            <div style="font-size:12px;color:#999;margin:-8px 0 14px;">最后更新：2026.11.12 13：11</div>
             <p>上传订单数据与碎卡兑换接龙表，自动核验兑换资格并生成审核结果</p>
         </div>
 
@@ -608,7 +608,7 @@
                 </div>
             </div>
 
-            <!-- 与活动方明细对比：以「聚合1004查询表」为基准，逐账号对比活动方发货明细，一次导出 5 个 Sheet -->
+            <!-- 与活动方明细对比：以「聚合1004查询表」为基准，逐账号对比活动方发货明细，一次导出 6 个 Sheet -->
             <div class="table-section" id="actCmpSection">
                 <div class="table-header">
                     <h3>🔍 与活动方明细对比</h3>
@@ -624,7 +624,7 @@
                     <span id="actCmpStatus" style="font-size:12px;color:#888;">未上传活动方明细（需先在上一区块跑出聚合1004查询表口径，再导出对比）</span>
                 </div>
                 <div style="font-size:12px;color:#888;margin-top:6px;line-height:1.7;">
-                    对比基准：当前「🧩 聚合1004查询表」（网站全流程计算结果，若已上传1004基准表则取1004覆盖后的值）。匹配顺序：下单账号 → 查询码 → 收货手机号（同一格内多个账号／手机号用「；」拆开逐个匹配）。数量类列按数值比、是否类列按「是／否」比、其余按文本比；活动方为空白或「/」「-」「—」「无」时视为不覆盖（保留平台值，不计入差异）。导出含「对比摘要」「账号级修改明细摘要」「差异逐列明细」「仅活动方有」「仅平台有」五个 Sheet。
+                    对比基准：当前「🧩 聚合1004查询表」（网站全流程计算结果，若已上传1004基准表则取1004覆盖后的值）。匹配顺序：下单账号 → 查询码 → 收货手机号（同一格内多个账号／手机号用「；」拆开逐个匹配）。数量类列按数值比、是否类列按「是／否」比、其余按文本比；活动方为空白或「/」「-」「—」「无」时视为不覆盖（保留平台值，不计入差异）。聚合一侧已最左侧前置与活动方同名的 7 列（下单账号／收货人姓名／收货人手机号／收货地址／物品统计／基础小卡张数／满赠+活动小卡张数（仅小卡）），可直接按列名比对；其中「物品统计」两边都解析成「款→张数」后逐款比。导出含「对比摘要」「账号级修改明细摘要」「差异逐列明细」「物品统计款级差异」「仅活动方有」「仅平台有」六个 Sheet。
                 </div>
             </div>
 
@@ -8046,6 +8046,277 @@ const GOODS_COLS = [
             return aggCell(name).replace(/[（(][^）)]*[)）]/g, '').trim();
         }
 
+        // ==================== 活动方发货明细 7 列（用于「与活动方明细对比」列名对齐） ====================
+        // 背景：活动方发货明细固定 7 列（下单账号／收货人姓名／收货人手机号／收货地址／
+        // 物品统计／基础小卡张数／满赠+活动小卡张数（仅小卡）），与聚合表原有 21 列列名体系不同，
+        // 直接对比会出现「参与对比的列为 0」。故在聚合表最左侧生成这 7 个同名列，原有 21 列整体右移。
+        const ACT_SHIP_COLS_7 = ['下单账号', '收货人姓名', '收货人手机号', '收货地址', '物品统计', '基础小卡张数', '满赠+活动小卡张数（仅小卡）'];
+
+        const ACT_SHIP_STOP = /^(无|未参与|未通过|未达标|未满10抽|不满足|不涉及|-|\/|—|－|——)$/;
+
+        function actShipUsable(text) {
+            const s = aggCell(text);
+            return !!s && !ACT_SHIP_STOP.test(s);
+        }
+        // 拆分「物品统计」类文本：分隔符与活动方一致（顿号为主，兼容逗号/分号/加号/换行）
+        function actShipSplit(text) {
+            return aggCell(text).split(/[、,，;；\n＋+]/).map(x => x.trim()).filter(Boolean);
+        }
+        // 解析单个片段为 {名称, 数量}：支持「名*3」「名×3」「名x3」「名 3张」「名 3（复数）」，默认 1
+        function actShipNameQty(seg) {
+            const t = aggCell(seg);
+            let name = t, qty = 1, m = null;
+            if ((m = t.match(/^(.*?)\s*[*×xX]\s*(\d+)\s*$/)) && m[1]) {
+                name = m[1].trim(); qty = parseInt(m[2], 10) || 1;
+            } else if ((m = t.match(/^(.*?)\s*(\d+)\s*张\s*$/)) && m[1]) {
+                name = m[1].trim(); qty = parseInt(m[2], 10) || 1;
+            } else if ((m = t.match(/^(.*?)\s*(\d+)\s*[（(]\s*复数\s*[）)]\s*$/)) && m[1]) {
+                name = m[1].trim(); qty = parseInt(m[2], 10) || 1;
+            }
+            name = name.replace(/[（(]\s*复数\s*[）)]/g, '').trim();
+            return { name: name, qty: qty };
+        }
+        // 商品名归一化：平台源字段常带人物前缀／款式后缀（如「陆西骁淋浴反转胶片」「mini PB 2」「陆西骁金属徽章」
+        // 「端盒独享白瓷工艺小卡」），统一折算成活动方「物品统计」里使用的标准商品名；返回 null 表示不列入
+        const ACT_SHIP_GOODS_FIX = [
+            [/反转胶片|淋浴胶片/, '反转胶片'],
+            [/mini\s*PB/i, 'mini PB'],
+            [/徽章/, '金属徽章'],
+            [/白瓷/, '白瓷工艺小卡'],
+            [/等比例/, '等比例长大小卡'],
+            [/贴纸/, '陆西骁卡通贴纸'],
+            [/光栅/, '光栅小卡'],
+            [/拍立得/, '烫色签名拍立得'],
+            [/卡册/, '亚克力A5卡册'],
+            [/^超like/i, null]
+        ];
+        function actShipGoodsName(name) {
+            const n = aggCell(name);
+            if (!n) return '';
+            for (let i = 0; i < ACT_SHIP_GOODS_FIX.length; i++) {
+                if (ACT_SHIP_GOODS_FIX[i][0].test(n)) return ACT_SHIP_GOODS_FIX[i][1];
+            }
+            return n;
+        }
+        // 卡款名识别与排序（R < SR < SSR < SSSR，同级按序号）
+        function actShipIsCard(name) {
+            return /^(SSSR|SSR|SR|R)\d+$/.test(aggCell(name).replace(/\s/g, ''));
+        }
+        function actShipCardSort(a, b) {
+            const rank = { 'R': 1, 'SR': 2, 'SSR': 3, 'SSSR': 4 };
+            const pa = aggCell(a).replace(/\s/g, '').match(/^(SSSR|SSR|SR|R)(\d+)$/) || [];
+            const pb = aggCell(b).replace(/\s/g, '').match(/^(SSSR|SSR|SR|R)(\d+)$/) || [];
+            const ra = rank[pa[1]] || 9, rb = rank[pb[1]] || 9;
+            if (ra !== rb) return ra - rb;
+            const na = parseInt(pa[2] || '0', 10), nb = parseInt(pb[2] || '0', 10);
+            if (na !== nb) return na - nb;
+            return a < b ? -1 : (a > b ? 1 : 0);
+        }
+        // 终极活动获得：把活动描述折算为活动方写法「镜头签(A/B/C)*N」「终极活动（D/E/F）*M」
+        function actShipFinalAct(text) {
+            const t = aggCell(text);
+            const res = { jtq: 0, def: 0, raw: '' };
+            if (!actShipUsable(t)) return res;
+            const mSets = t.match(/共\s*(\d+)\s*套/);
+            const mult = mSets ? (parseInt(mSets[1], 10) || 1) : 1;
+            if (/ABCDEF\s*全套/.test(t)) { res.jtq += 3 * mult; res.def += 3 * mult; return res; }
+            if (/ABC\s*全套/.test(t)) { res.jtq += 3 * mult; return res; }
+            const mJtq = t.match(/(\d+)\s*张\s*镜头签/);
+            if (mJtq) { res.jtq += (parseInt(mJtq[1], 10) || 0) * mult; return res; }
+            if (/D\/E\/F|DEF/.test(t)) { res.def += 3 * mult; return res; }
+            res.raw = t;
+            return res;
+        }
+        // 生成「物品统计」：卡款写成 R43*1，其余商品用原名*数量，多项用「、」分隔
+        function actShipBuildItems(row, CK) {
+            const get = k => (CK[k] !== undefined ? aggCell(row[CK[k]]) : '');
+            const cards = {};      // 卡款 → 张数
+            const goods = {};      // 商品原名 → 数量
+            const order = [];      // 商品首次出现顺序
+            const addCard = (name, qty) => {
+                const n = aggCell(name).replace(/\s/g, '');
+                if (!n) return;
+                cards[n] = (cards[n] || 0) + (Number(qty) || 0);
+            };
+            const addGoods = (name, qty) => {
+                const n = actShipGoodsName(name);
+                if (!n) return;
+                if (goods[n] === undefined) order.push(n);
+                goods[n] = (goods[n] || 0) + (Number(qty) || 0);
+            };
+            // 通用：把一段文本按「名称*数量」拆开，卡款归卡、其余归商品
+            const eat = text => {
+                actShipSplit(text).forEach(seg => {
+                    if (ACT_SHIP_STOP.test(seg)) return;
+                    const nq = actShipNameQty(seg);
+                    if (!nq.name) return;
+                    if (actShipIsCard(nq.name)) addCard(nq.name, nq.qty);
+                    else addGoods(nq.name, nq.qty);
+                });
+            };
+            // 1) 卡款：获得卡片 + 超like兑换卡面 + 宣传集赞礼 +（兑换通过时）成功兑换到的卡面 − 用于兑换的卡
+            if (actShipUsable(get('获得卡片'))) eat(get('获得卡片'));
+            if (actShipUsable(get('超like兑换卡面'))) eat(get('超like兑换卡面'));
+            if (actShipUsable(get('宣传集赞礼'))) eat(get('宣传集赞礼'));
+            if (/审核通过|碎卡兑换更新|已完成|已兑换/.test(get('碎卡兑换审核状态'))) {
+                if (actShipUsable(get('成功兑换到的卡面'))) eat(get('成功兑换到的卡面'));
+            }
+            if (actShipUsable(get('用于兑换的卡'))) {
+                actShipSplit(get('用于兑换的卡')).forEach(seg => {
+                    if (ACT_SHIP_STOP.test(seg)) return;
+                    const nq = actShipNameQty(seg);
+                    const n = aggCell(nq.name).replace(/\s/g, '');
+                    if (!n) return;
+                    if (cards[n] !== undefined) {
+                        cards[n] -= nq.qty;
+                        if (cards[n] <= 0) delete cards[n];
+                    }
+                });
+            }
+            // 2) 个人满赠／个人满抽礼：沿用原文名称与数量
+            const giftText = actShipUsable(get('个人满抽礼')) ? get('个人满抽礼') : get('个人满赠');
+            if (actShipUsable(giftText)) eat(giftText);
+            // 3) 限时小卡（平台写「限时1×1」，活动方写「限时小卡1*1」）
+            if (actShipUsable(get('限时小卡获得'))) {
+                actShipSplit(get('限时小卡获得')).forEach(seg => {
+                    if (ACT_SHIP_STOP.test(seg)) return;
+                    const nq = actShipNameQty(seg);
+                    let nm = nq.name.replace(/\s/g, '');
+                    const m = nm.match(/^限时(\d+)$/);
+                    if (m) nm = '限时小卡' + m[1];
+                    addGoods(nm, nq.qty);
+                });
+            }
+            // 4) 浪漫疯子获得（平台写「不重复×2」，活动方写「浪漫疯子不重复*2」）
+            if (actShipUsable(get('浪漫疯子获得'))) {
+                actShipSplit(get('浪漫疯子获得')).forEach(seg => {
+                    if (ACT_SHIP_STOP.test(seg)) return;
+                    const nq = actShipNameQty(seg);
+                    let nm = nq.name.replace(/\s/g, '');
+                    if (/^浪漫疯子/.test(nm)) { /* 已是全称 */ }
+                    else if (/不重复/.test(nm)) nm = '浪漫疯子不重复';
+                    else if (/随机|一张/.test(nm)) nm = '浪漫疯子随机';
+                    else nm = '浪漫疯子' + nm;
+                    addGoods(nm, nq.qty);
+                });
+            }
+            // 5) 周末活动获得
+            if (actShipUsable(get('周末活动获得'))) {
+                actShipSplit(get('周末活动获得')).forEach(seg => {
+                    if (ACT_SHIP_STOP.test(seg)) return;
+                    const nq = actShipNameQty(seg);
+                    let nm = nq.name.replace(/\s/g, '');
+                    if (!/^周末活动/.test(nm)) nm = '周末活动' + nm;
+                    addGoods(nm, nq.qty);
+                });
+            }
+            // 6) 终极活动获得
+            const fa = actShipFinalAct(get('终极活动获得'));
+            if (fa.jtq > 0) addGoods('镜头签(A/B/C)', fa.jtq);
+            if (fa.def > 0) addGoods('终极活动（D/E/F）', fa.def);
+            if (fa.raw) addGoods(fa.raw, 1);
+            // 7) 超like卡（超like破3000卡等）：活动方「物品统计」不记录该达标卡，故不列入
+            // 8) 全员满赠：活动规则为全员每单固定 3 张（1111 版 2914 行实测全部为 3 张），活动方「物品统计」均单列
+            if (Object.keys(cards).length || order.length) addGoods('全员满赠', 3);
+            // 9) 全员特典：活动方写作「10抽全员特典*项数」
+            const specItems = actShipSplit(get('全员特典')).filter(x => !ACT_SHIP_STOP.test(x));
+            if (specItems.length) addGoods('10抽全员特典', specItems.length);
+            // 9) 组装：端盒 → 卡款 → 商品
+            const out = [];
+            if (/^(是|有|√|Y|y)$/i.test(get('是否端盒'))) out.push('端盒（86款基础卡面各1）');
+            Object.keys(cards).sort(actShipCardSort).forEach(k => { if (cards[k] > 0) out.push(k + '*' + cards[k]); });
+            order.forEach(k => { if (goods[k] > 0) out.push(k + '*' + goods[k]); });
+            return out.join('、');
+        }
+        // 基础小卡张数：活动方实发口径＝Σ该账号卡款张数 + 86×端盒数（不再填总抽数）
+        //   卡款张数＝「物品统计」中 R/SR/SSR/SSSR 各款张数之和（已含换入/换出冲抵后的实发张数）
+        //   端盒：是否端盒为「是/有」时按 1 个端盒计，每个端盒含 86 款基础卡面各 1 张
+        function actShipCardSum(txt) {
+            if (!txt) return 0;
+            let tot = 0;
+            actShipSplit(txt).forEach(seg => {
+                const nq = actShipNameQty(seg);
+                const nm = aggCell(nq.name).replace(/\s/g, '');
+                if (!/^(SSSR|SSR|SR|R)\d+$/.test(nm)) return;
+                tot += nq.qty;
+            });
+            return tot;
+        }
+        function actShipBoxCount(row, CK) {
+            if (CK['端盒数'] !== undefined) {
+                const v = actNum(row[CK['端盒数']]);
+                if (v) return v;
+            }
+            const t = CK['是否端盒'] !== undefined ? aggCell(row[CK['是否端盒']]) : '';
+            if (/^\d+$/.test(t)) return parseInt(t, 10) || 0;
+            return /^(是|有|√|Y|y)$/i.test(t) ? 1 : 0;
+        }
+        function actShipBaseCards(row, CK, itemsTxt) {
+            const txt = itemsTxt === undefined ? actShipBuildItems(row, CK) : itemsTxt;
+            return actShipCardSum(txt) + 86 * actShipBoxCount(row, CK);
+        }
+        // 满赠+活动小卡张数（仅小卡）：活动方口径＝「物品统计」中所有小卡类赠品张数合计
+        //   含：个人满赠／个人满抽礼 中的非卡面商品、限时小卡、浪漫疯子、周末活动、镜头签、终极活动（D/E/F）、全员满赠
+        //   不含：基础卡面（R/SR/SSR）、端盒（86 款基础卡面）、10抽全员特典（抽奖达标小卡）
+        function actShipGiftCards(row, CK, itemsTxt) {
+            const txt = itemsTxt === undefined ? actShipBuildItems(row, CK) : itemsTxt;
+            if (!txt) return '';
+            let tot = 0;
+            actShipSplit(txt).forEach(seg => {
+                const nq = actShipNameQty(seg);
+                const n = aggCell(nq.name);
+                if (!n || actShipIsCard(n)) return;
+                if (/^端盒/.test(n) || /^10抽全员特典/.test(n)) return;
+                tot += nq.qty;
+            });
+            return tot;
+        }
+        // 按账号／手机号在网站用户数据里找收货信息（姓名、地址优先取网站已有值，取不到留空）
+        function actShipUserMaps() {
+            const byAcct = {}, byPhone = {};
+            (userData || []).forEach(u => {
+                if (!u) return;
+                actSplitKeys(u.wechat).forEach(a => { const k = aggCell(a); if (k && !byAcct[k]) byAcct[k] = u; });
+                const p = aggCell(u.phone).replace(/\D/g, '');
+                if (p && !byPhone[p]) byPhone[p] = u;
+            });
+            return { byAcct: byAcct, byPhone: byPhone };
+        }
+        function actShipFindUser(maps, acctCell, phoneCell) {
+            if (!maps) return null;
+            for (const a of actSplitKeys(acctCell)) { const k = aggCell(a); if (k && maps.byAcct[k]) return maps.byAcct[k]; }
+            for (const p of actSplitPhones(phoneCell)) { if (p && maps.byPhone[p]) return maps.byPhone[p]; }
+            return null;
+        }
+        // 生成 7 列（顺序与活动方发货明细完全一致）
+        function actShipBuild7(row, CK, maps) {
+            const acct = CK['下单账号'] !== undefined ? aggCell(row[CK['下单账号']]) : '';
+            const phone = CK['收货人手机号'] !== undefined ? aggCell(row[CK['收货人手机号']]) : '';
+            const u = actShipFindUser(maps, acct, phone);
+            const items = actShipBuildItems(row, CK);
+            return [
+                acct,
+                u ? aggCell(u.recipientName) : '',
+                phone,
+                u ? aggCell(u.address) : '',
+                items,
+                actShipBaseCards(row, CK, items),
+                actShipGiftCards(row, CK, items)
+            ];
+        }
+        // 把「物品统计」文本解析为 款 → 张数（款级比对用；不做整段文本比较，两边写法天然不同）
+        function actParseItemsMap(text) {
+            const map = {};
+            actShipSplit(text).forEach(seg => {
+                if (ACT_SHIP_STOP.test(seg)) return;
+                const nq = actShipNameQty(seg);
+                if (!nq.name) return;
+                const n = nq.name.replace(/\s/g, '');
+                map[n] = (map[n] || 0) + nq.qty;
+            });
+            return map;
+        }
+
         function clearAgg1004() {
             agg1004Data = null;
             const input = document.getElementById('agg1004Input');
@@ -8172,6 +8443,11 @@ const GOODS_COLS = [
             baseHeaders.forEach((h, i) => { h2i[h] = i; });
             const iAcct = h2i['下单账号'] !== undefined ? h2i['下单账号'] : 1;
             const iPhone = h2i['收货人手机号'] !== undefined ? h2i['收货人手机号'] : 2;
+            // 底表列名 → 列索引（去括号宽松匹配），供生成活动方发货明细同名 7 列使用
+            const CK = {};
+            baseHeaders.forEach((h, i) => { const k = aggColKey(h); if (k && CK[k] === undefined) CK[k] = i; });
+            if (CK['个人满抽礼'] === undefined && CK['个人满赠'] !== undefined) CK['个人满抽礼'] = CK['个人满赠'];
+            const shipMaps = actShipUserMaps();
 
             // 2) 1004 ↔ 底表 列映射（按列名匹配，1004 独有列单独收）
             const idx = agg1004Index();
@@ -8197,7 +8473,7 @@ const GOODS_COLS = [
             baseRows.forEach(row => {
                 const acct = aggCell(row[iAcct]);
                 const phone = aggCell(row[iPhone]);
-                const out = row.slice();
+                let out = row.slice();
                 while (out.length < baseHeaders.length) out.push('');
                 let source = '网站计算';
                 let qaVal = '';
@@ -8226,6 +8502,8 @@ const GOODS_COLS = [
                         source = '仅网站计算（1004无此账号）';
                     }
                 }
+                // 前置活动方发货明细同名 7 列（取 1004 覆盖后的最终值；姓名/地址优先取网站收货信息）
+                out = actShipBuild7(out, CK, shipMaps).concat(out);
                 if (addSourceCol) out.push(source);
                 if (keepQACol) out.push(qaVal);
                 outRows.push(out);
@@ -8236,7 +8514,7 @@ const GOODS_COLS = [
             if (use1004 && keepOnly1004Row) {
                 agg1004Data.rows.forEach((r1004, ri) => {
                     if (used1004Row[ri]) return;
-                    const row = new Array(baseHeaders.length).fill('');
+                    let row = new Array(baseHeaders.length).fill('');
                     Object.keys(colMap).forEach(ciStr => {
                         const ci = Number(ciStr);
                         row[colMap[ci]] = aggCell(r1004[ci]);
@@ -8244,6 +8522,7 @@ const GOODS_COLS = [
                     if (!aggCell(row[iAcct])) row[iAcct] = aggCell(r1004[idx.cAcct >= 0 ? idx.cAcct : 1]);
                     if (!aggCell(row[0])) row[0] = row[iAcct];
                     if (!aggCell(row[iPhone]) && idx.cPhone >= 0) row[iPhone] = aggCell(r1004[idx.cPhone]);
+                    row = actShipBuild7(row, CK, shipMaps).concat(row);
                     if (addSourceCol) row.push('仅1004有（网站无此账号）');
                     if (keepQACol) row.push(idx.cQA >= 0 ? aggCell(r1004[idx.cQA]) : '');
                     outRows.push(row);
@@ -8252,13 +8531,16 @@ const GOODS_COLS = [
             }
 
             // 5) 输出三个 Sheet
-            const finalHeaders = baseHeaders.slice();
+            const finalHeaders = ACT_SHIP_COLS_7.slice().concat(baseHeaders);
             if (addSourceCol) finalHeaders.push('数据来源');
             if (keepQACol) finalHeaders.push('问卷反馈');
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet([finalHeaders, ...outRows]);
             ws['!cols'] = finalHeaders.map(h => {
+                if (h === '物品统计') return { wch: 72 };
+                if (h === '收货地址') return { wch: 42 };
+                if (h === '收货人姓名') return { wch: 14 };
                 if (h === '获得卡片' || h === '审核原因明细') return { wch: 46 };
                 if (h === '备注' || h === '数据来源' || h === '问卷反馈') return { wch: 34 };
                 if (h === '下单账号' || h === '查询码(下单账号)') return { wch: 22 };
@@ -8284,6 +8566,11 @@ const GOODS_COLS = [
                 ['仅1004有、网站无的新增行数', appended],
                 ['被覆盖的单元格条数', diffs.length],
                 ['最终输出行数', outRows.length],
+                ['新增前置列（活动方发货明细同名7列）', ACT_SHIP_COLS_7.join('、')],
+                ['新增7列口径-物品统计', '按平台各列还原的实发清单：卡款写 R43*1、其余商品用原名*数量、多项用「、」分隔；商品名已归一到活动方写法（陆西骁淋浴反转胶片→反转胶片、mini PB 2→mini PB、端盒独享白瓷工艺小卡并入白瓷工艺小卡、陆西骁金属徽章→金属徽章）；全员满赠按活动规则每单 3 张固定列入；超like达标卡不列入'],
+                ['新增7列口径-基础小卡张数', '＝Σ卡款张数＋86×端盒数（活动方实发口径：物品统计中各 R/SR/SSR 款张数之和，是否端盒为是时按 1 个端盒 = 86 款基础卡面各 1 张补入）；已不再使用平台「总抽数」，与活动方同名列可直接对比'],
+                ['新增7列口径-满赠+活动小卡张数', '＝物品统计中所有小卡类赠品张数合计（个人满抽礼/个人满赠的非卡面商品＋限时小卡＋浪漫疯子＋周末活动＋镜头签＋终极活动（D/E/F）＋全员满赠）；不含基础卡面、端盒、10抽全员特典'],
+                ['新增7列口径-收货信息', '收货人姓名、收货地址取网站已有收货信息（按下单账号→手机号匹配），取不到留空'],
                 ['覆盖口径', '按下单账号 → 查询码 → 手机号 逐级匹配；1004 有值即覆盖，空白或「/」保留网站值'],
                 ['说明', '「覆盖差异」Sheet 逐条列明每处改动的前后值，可用于核对客服反馈是否已全部落地']
             ]);
@@ -8294,7 +8581,7 @@ const GOODS_COLS = [
 
             const st = document.getElementById('agg1004Status');
             if (st) {
-                st.textContent = '已导出：共 ' + outRows.length + ' 行；1004 匹配 ' + hitRows + ' 行，覆盖 ' + diffs.length + ' 处，仅1004新增 ' + appended + ' 行';
+                st.textContent = '已导出：共 ' + outRows.length + ' 行（已前置活动方同名 7 列）；1004 匹配 ' + hitRows + ' 行，覆盖 ' + diffs.length + ' 处，仅1004新增 ' + appended + ' 行';
                 st.style.color = '#059669';
             }
         }
@@ -8309,13 +8596,15 @@ const GOODS_COLS = [
 
         // ==================== 与活动方明细对比 ====================
         // 定位：以「聚合1004查询表」（网站全流程计算 + 已上传1004基准覆盖后的结果）为基准，
-        // 与上传的活动方发货明细逐账号比对，一次导出 5 个 Sheet，方便一次性核对差异。
+        // 与上传的活动方发货明细逐账号比对，一次导出 6 个 Sheet（含物品统计款级差异），方便一次性核对差异。
         let actCmpData = null; // { headers:[], rows:[[]], fileName, sheetName }
 
         // 活动方列名与聚合列名不同但语义相同时的映射（左：活动方列名，右：聚合列名）
         const ACT_CMP_ALIAS = {
             // 活动方表里的「基础小卡张数」＝每抽发 1 张基础小卡，与平台「总抽数」同义，故映射后按数值比
-            '基础小卡张数': '总抽数'
+            '基础小卡张数': '总抽数',
+            // 聚合表已最左侧前置同名 7 列后，下面这条主要作兜底：同名列优先直配，配不上才回落到别名
+            '满赠+活动小卡张数': '个人满抽礼'
         };
 
         // 账号／查询码格：按常见分隔符拆成多个键
@@ -8526,7 +8815,15 @@ const GOODS_COLS = [
                     });
                 });
             }
-            return { headers, rows, overlayCells, use1004 };
+            // 与「导出聚合1004查询表」保持完全一致的输出结构：最左侧前置活动方发货明细同名 7 列，
+            // 使本区块能按同名直接比对（姓名/地址取网站收货信息，物品统计按活动方写法还原）
+            const CK = {};
+            headers.forEach((h, i) => { const k = aggColKey(h); if (k && CK[k] === undefined) CK[k] = i; });
+            if (CK['个人满抽礼'] === undefined && CK['个人满赠'] !== undefined) CK['个人满抽礼'] = CK['个人满赠'];
+            const shipMaps = actShipUserMaps();
+            const outHeaders = ACT_SHIP_COLS_7.slice().concat(headers);
+            const outRows = rows.map(r => actShipBuild7(r, CK, shipMaps).concat(r));
+            return { headers: outHeaders, rows: outRows, overlayCells, use1004 };
         }
 
         function exportActCmpExcel() {
@@ -8554,18 +8851,28 @@ const GOODS_COLS = [
             headers.forEach((h, bi) => {
                 const key = aggColKey(h);
                 if (!key) return;
-                const target = ACT_CMP_ALIAS[key] || key;
-                const ai = actHeaders.findIndex(x => aggColKey(x) === target);
+                // 同名直配优先，配不上再用别名兜底（避免别名把已存在的同名列顶掉）
+                let ai = actHeaders.findIndex(x => aggColKey(x) === key);
+                if (ai < 0) {
+                    const target = ACT_CMP_ALIAS[key] || key;
+                    ai = actHeaders.findIndex(x => aggColKey(x) === target);
+                }
                 if (ai >= 0) aColOf[bi] = ai;
             });
             // 匹配键不参与内容对比（账号/查询码/手机号本身只用于定位）
             const KEYCOLS = { '下单账号': 1, '查询码': 1, '收货人手机号': 1 };
-            const cmpBaseCols = Object.keys(aColOf).map(Number).filter(bi => !KEYCOLS[aggColKey(headers[bi])]);
+            // 「物品统计」不按整段文本比（两边写法天然不同），改走下方「款级解析比对」
+            const iBaseItems = h2i['物品统计'] !== undefined ? h2i['物品统计'] : -1;
+            const iActItems = actHeaders.findIndex(x => aggColKey(x) === '物品统计');
+            const cmpBaseCols = Object.keys(aColOf).map(Number)
+                .filter(bi => !KEYCOLS[aggColKey(headers[bi])] && aggColKey(headers[bi]) !== '物品统计');
             const usedActCol = {};
             cmpBaseCols.forEach(bi => { usedActCol[aColOf[bi]] = true; });
 
             const idx = actCmpIndex();
             const diffRows = [];      // 差异逐列明细
+            const itemDiffRows = [];  // 物品统计款级差异
+            let itemDiffAcct = 0;
             const acctSum = [];       // 账号级修改明细摘要
             const onlyPlatform = [];  // 仅平台有
             const usedActRow = {};
@@ -8614,6 +8921,24 @@ const GOODS_COLS = [
                         actCmpData.sheetName
                     ]);
                 }
+                // 物品统计：两边都解析成「款 → 张数」再逐款比（卡款如 R43、商品如 限时小卡1）
+                if (iBaseItems >= 0 && iActItems >= 0) {
+                    const pMap = actParseItemsMap(row[iBaseItems]);
+                    const aMap = actParseItemsMap(aRow[iActItems]);
+                    const keys = [];
+                    Object.keys(pMap).forEach(k => { if (keys.indexOf(k) < 0) keys.push(k); });
+                    Object.keys(aMap).forEach(k => { if (keys.indexOf(k) < 0) keys.push(k); });
+                    let acctHit = 0;
+                    keys.forEach(k => {
+                        const pv = pMap[k] || 0;
+                        const av = aMap[k] || 0;
+                        if (pv === av) return;
+                        const type = pv === 0 ? '仅活动方有' : (av === 0 ? '仅平台有' : '张数不等');
+                        itemDiffRows.push([acct, phone, k, pv, av, av - pv, type, m.by]);
+                        acctHit++;
+                    });
+                    if (acctHit > 0) itemDiffAcct++;
+                }
             });
 
             // 仅活动方有：活动方存在、聚合1004查询表按三键均找不到
@@ -8652,6 +8977,8 @@ const GOODS_COLS = [
                 ['匹配到的账号组数', matchGroups],
                 ['存在差异的账号数', diffAcct],
                 ['差异单元格条数（逐列）', diffRows.length],
+                ['物品统计款级差异条数', itemDiffRows.length],
+                ['物品统计有差异的账号数', itemDiffAcct],
                 ['仅活动方有（行数）', onlyAct.length],
                 ['仅平台有（行数）', onlyPlatform.length],
                 ['参与对比的列（' + cmpColNames.length + '列）', cmpColNames.join('、') || '无（两侧无同名可对比列）'],
@@ -8659,7 +8986,7 @@ const GOODS_COLS = [
                 ['活动方独有列（不参与对比）', actOnlyCols.join('、') || '无'],
                 ['列名映射（活动方列 → 平台列）', Object.keys(ACT_CMP_ALIAS).map(k => k + ' → ' + ACT_CMP_ALIAS[k]).join('；') || '无'],
                 ['匹配口径', '下单账号 → 查询码 → 收货手机号 逐级匹配；单元格内多个账号／手机号用「；」拆开逐个比'],
-                ['比较口径', '数量类列（含张数/抽数/数量等）按数值比；是否类列（含「是否」或两侧取值均为是/否）按是否比；其余按文本比（忽略多余空格、统一中英文逗号分号）'],
+                ['比较口径', '数量类列（含张数/抽数/数量等）按数值比；是否类列（含「是否」或两侧取值均为是/否）按是否比；「物品统计」两边先解析成「款→张数」再逐款比（结果见「物品统计款级差异」Sheet），其余按文本比（忽略多余空格、统一中英文逗号分号）'],
                 ['不覆盖规则', '活动方为空白或「/」「-」「—」「无」时视为不覆盖：保留平台值，且不计入差异'],
                 ['说明', '「账号级修改明细摘要」为一账号一行，列出被改的列与「前 → 后」摘要；「差异逐列明细」逐格列明前后值，可直接定位到列；「仅活动方有」「仅平台有」为两侧未能互相匹配的账号清单']
             ], [{ wch: 26 }, { wch: 100 }]);
@@ -8673,6 +9000,11 @@ const GOODS_COLS = [
                 ['下单账号', '收货人手机号', '被对比的列', '聚合1004查询表（平台）', '活动方明细', '对比方式', '匹配方式', '活动方工作表'],
                 diffRows,
                 [{ wch: 22 }, { wch: 15 }, { wch: 18 }, { wch: 40 }, { wch: 40 }, { wch: 10 }, { wch: 22 }, { wch: 16 }]);
+
+            putSheet('物品统计款级差异',
+                ['下单账号', '收货人手机号', '款名／商品名', '聚合1004查询表（平台张数）', '活动方明细（张数）', '差额（活动方 − 平台）', '差异类型', '匹配方式'],
+                itemDiffRows,
+                [{ wch: 22 }, { wch: 15 }, { wch: 26 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 22 }]);
 
             putSheet('仅活动方有',
                 ['说明'].concat(actHeaders),
@@ -8693,7 +9025,7 @@ const GOODS_COLS = [
 
             const st = document.getElementById('actCmpStatus');
             if (st) {
-                st.textContent = '已导出：基准 ' + rows.length + ' 行，匹配 ' + matchGroups + ' 组；有差异账号 ' + diffAcct + ' 个／差异 ' + diffRows.length + ' 处；仅活动方有 ' + onlyAct.length + ' 行，仅平台有 ' + onlyPlatform.length + ' 行';
+                st.textContent = '已导出：基准 ' + rows.length + ' 行，匹配 ' + matchGroups + ' 组；有差异账号 ' + diffAcct + ' 个／差异 ' + diffRows.length + ' 处；物品统计款级差异 ' + itemDiffRows.length + ' 条；仅活动方有 ' + onlyAct.length + ' 行，仅平台有 ' + onlyPlatform.length + ' 行';
                 st.style.color = '#059669';
             }
         }
