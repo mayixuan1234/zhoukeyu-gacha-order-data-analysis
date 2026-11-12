@@ -608,6 +608,26 @@
                 </div>
             </div>
 
+            <!-- 与活动方明细对比：以「聚合1004查询表」为基准，逐账号对比活动方发货明细，一次导出 5 个 Sheet -->
+            <div class="table-section" id="actCmpSection">
+                <div class="table-header">
+                    <h3>🔍 与活动方明细对比</h3>
+                    <div>
+                        <button class="btn btn-sm" id="actCmpExportBtn" onclick="exportActCmpExcel()" title="以当前「聚合1004查询表」为基准，与上传的活动方发货明细逐账号比对，导出含5个Sheet的对比结果">📥 导出对比结果</button>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:#f4f8fc;border:1px solid #dbe4ee;border-radius:8px;">
+                    <span style="font-size:13px;color:#20517d;font-weight:600;">📤 活动方发货明细</span>
+                    <label style="font-size:12px;color:#555;">上传活动方表：</label>
+                    <input type="file" id="actCmpInput" accept=".xlsx,.xls,.csv">
+                    <button class="btn" id="actCmpClearBtn" style="background:#eef3f9;color:#20517d;" title="清除已上传的活动方明细，恢复未上传状态">清除活动方表</button>
+                    <span id="actCmpStatus" style="font-size:12px;color:#888;">未上传活动方明细（需先在上一区块跑出聚合1004查询表口径，再导出对比）</span>
+                </div>
+                <div style="font-size:12px;color:#888;margin-top:6px;line-height:1.7;">
+                    对比基准：当前「🧩 聚合1004查询表」（网站全流程计算结果，若已上传1004基准表则取1004覆盖后的值）。匹配顺序：下单账号 → 查询码 → 收货手机号（同一格内多个账号／手机号用「；」拆开逐个匹配）。数量类列按数值比、是否类列按「是／否」比、其余按文本比；活动方为空白或「/」「-」「—」「无」时视为不覆盖（保留平台值，不计入差异）。导出含「对比摘要」「账号级修改明细摘要」「差异逐列明细」「仅活动方有」「仅平台有」五个 Sheet。
+                </div>
+            </div>
+
             <div class="table-section">
                 <div id="userDetailPanel" class="hidden" style="padding: 16px 20px; margin-bottom: 14px; border-radius: 12px; background: linear-gradient(135deg, #f0f7ff, #fff8e8); border: 1px solid #dce8f5;"></div>
                 <div class="table-header">
@@ -8285,6 +8305,405 @@ const GOODS_COLS = [
             if (input) input.addEventListener('change', handleAgg1004File);
             const clr = document.getElementById('agg1004ClearBtn');
             if (clr) clr.addEventListener('click', clearAgg1004);
+        })();
+
+        // ==================== 与活动方明细对比 ====================
+        // 定位：以「聚合1004查询表」（网站全流程计算 + 已上传1004基准覆盖后的结果）为基准，
+        // 与上传的活动方发货明细逐账号比对，一次导出 5 个 Sheet，方便一次性核对差异。
+        let actCmpData = null; // { headers:[], rows:[[]], fileName, sheetName }
+
+        // 活动方列名与聚合列名不同但语义相同时的映射（左：活动方列名，右：聚合列名）
+        const ACT_CMP_ALIAS = {
+            // 活动方表里的「基础小卡张数」＝每抽发 1 张基础小卡，与平台「总抽数」同义，故映射后按数值比
+            '基础小卡张数': '总抽数'
+        };
+
+        // 账号／查询码格：按常见分隔符拆成多个键
+        function actSplitKeys(cell) {
+            return aggCell(cell).split(/[；;、,，\/\|\n]/).map(x => x.trim()).filter(Boolean);
+        }
+        // 手机号格：拆开并只保留数字（含「；」并列多号的情况）
+        function actSplitPhones(cell) {
+            return aggSplitKeysLoose(cell);
+        }
+        function aggSplitKeysLoose(cell) {
+            return aggCell(cell).split(/[；;、,，\/\|\s]+/).map(x => x.replace(/\D/g, '')).filter(Boolean);
+        }
+        function actNormText(v) {
+            return aggCell(v).replace(/\s+/g, ' ').replace(/，/g, ',').replace(/；/g, ';');
+        }
+        function actFlagValue(v) {
+            const s = actNormText(v).replace(/\s/g, '');
+            if (!s) return '';
+            if (/^(是|Y|y|YES|Yes|yes|√|有|已兑|已兑换|已完成|成功|通过)$/.test(s)) return '是';
+            if (/^(否|N|n|NO|No|no|×|X|x|无|未|未兑|未兑换|未完成|失败|不通过)$/.test(s)) return '否';
+            return '';
+        }
+        function actNum(v) {
+            const s = actNormText(v).replace(/[,，\s]/g, '');
+            if (!s) return null;
+            const m = s.match(/-?\d+(\.\d+)?/);
+            if (!m) return null;
+            const n = Number(m[0]);
+            return isNaN(n) ? null : n;
+        }
+        function actColKind(name) {
+            const n = aggColKey(name);
+            if (/^是否/.test(n)) return 'flag';
+            if (/张数|抽数|数量|个数|件数|枚数|次数/.test(n)) return 'num';
+            return 'text';
+        }
+        function actCmpKind(name, a, b) {
+            const k = actColKind(name);
+            if (k === 'num' || k === 'flag') return k;
+            const fa = actFlagValue(a), fb = actFlagValue(b);
+            if ((fa === '是' || fa === '否') && (fb === '是' || fb === '否')) return 'flag';
+            return 'text';
+        }
+        function actCmpSame(kind, a, b) {
+            if (kind === 'num') {
+                const na = actNum(a), nb = actNum(b);
+                if (na !== null && nb !== null) return na === nb;
+                return actNormText(a) === actNormText(b);
+            }
+            if (kind === 'flag') {
+                const fa = actFlagValue(a), fb = actFlagValue(b);
+                if (fa && fb) return fa === fb;
+                return actNormText(a) === actNormText(b);
+            }
+            return actNormText(a) === actNormText(b);
+        }
+
+        function clearActCmp() {
+            actCmpData = null;
+            const input = document.getElementById('actCmpInput');
+            if (input) input.value = '';
+            const st = document.getElementById('actCmpStatus');
+            if (st) {
+                st.textContent = '未上传活动方明细（需先在上一区块跑出聚合1004查询表口径，再导出对比）';
+                st.style.color = '#888';
+            }
+        }
+
+        function handleActCmpFile(e) {
+            const f = e && e.target && e.target.files && e.target.files[0];
+            if (!f) return;
+            const st = document.getElementById('actCmpStatus');
+            if (st) { st.textContent = '正在读取 ' + f.name + ' …'; st.style.color = '#888'; }
+            const reader = new FileReader();
+            reader.onload = ev => {
+                try {
+                    const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+                    // 选工作表：优先含「下单账号／收货人／手机号」表头的工作表，否则用第一个
+                    let sheetName = wb.SheetNames[0];
+                    let picked = null;
+                    for (const sn of wb.SheetNames) {
+                        const aoaTmp = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '', raw: false });
+                        const hiTmp = actCmpFindHeaderRow(aoaTmp);
+                        if (hiTmp >= 0) { sheetName = sn; picked = aoaTmp; break; }
+                    }
+                    const aoa = picked || XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '', raw: false });
+                    const hi = actCmpFindHeaderRow(aoa);
+                    if (hi < 0) {
+                        actCmpData = null;
+                        if (st) { st.textContent = '读取失败：未找到含「下单账号／收货人」的表头行'; st.style.color = '#c0392b'; }
+                        alert('活动方明细读取失败：未在前 10 行找到表头（需含「下单账号」或「收货人手机号」等列）。');
+                        return;
+                    }
+                    const headers = (aoa[hi] || []).map(aggCell);
+                    const rows = aoa.slice(hi + 1).filter(r => Array.isArray(r) && r.some(c => !aggIsBlank(c)));
+                    if (!rows.length) {
+                        actCmpData = null;
+                        if (st) { st.textContent = '读取失败：表格为空'; st.style.color = '#c0392b'; }
+                        alert('活动方明细没有数据行。');
+                        return;
+                    }
+                    actCmpData = { headers, rows, fileName: f.name, sheetName };
+                    if (st) {
+                        st.textContent = '已载入活动方明细：' + f.name + '（工作表 ' + sheetName + '，' + rows.length + ' 行，' + headers.length + ' 列）';
+                        st.style.color = '#059669';
+                    }
+                } catch (err) {
+                    actCmpData = null;
+                    if (st) { st.textContent = '读取失败：' + (err && err.message ? err.message : err); st.style.color = '#c0392b'; }
+                    alert('活动方明细读取失败：' + (err && err.message ? err.message : err));
+                }
+            };
+            reader.onerror = () => {
+                actCmpData = null;
+                if (st) { st.textContent = '读取失败：文件无法读取'; st.style.color = '#c0392b'; }
+            };
+            reader.readAsArrayBuffer(f);
+        }
+
+        // 表头行探测：前 10 行内出现「下单账号／收货人手机号／收货人姓名」
+        function actCmpFindHeaderRow(aoa) {
+            for (let i = 0; i < Math.min(aoa.length, 10); i++) {
+                const line = (aoa[i] || []).map(aggCell).join('|');
+                if (line.indexOf('下单账号') >= 0 || line.indexOf('收货人手机号') >= 0 || line.indexOf('收货人姓名') >= 0) return i;
+            }
+            return -1;
+        }
+
+        // 活动方索引：下单账号 / 查询码 / 手机号 三套键
+        function actCmpIndex() {
+            const idx = { byAcct: {}, byCode: {}, byPhone: {}, cAcct: -1, cCode: -1, cPhone: -1, cName: -1 };
+            if (!actCmpData) return idx;
+            const headers = actCmpData.headers;
+            const findCol = names => {
+                for (const n of names) {
+                    const i = headers.findIndex(h => aggColKey(h) === n);
+                    if (i >= 0) return i;
+                }
+                return -1;
+            };
+            idx.cAcct = findCol(['下单账号', '账号', '买家账号', '下单帐号']);
+            idx.cCode = findCol(['查询码', '查询码(下单账号)']);
+            idx.cPhone = findCol(['收货人手机号', '收货手机号', '手机号', '联系电话']);
+            idx.cName = findCol(['收货人姓名', '收货人', '姓名', '收件人']);
+            const push = (map, key, i) => { if (!key) return; (map[key] = map[key] || []).push(i); };
+            actCmpData.rows.forEach((r, i) => {
+                actSplitKeys(r[idx.cAcct]).forEach(a => push(idx.byAcct, a, i));
+                if (idx.cCode >= 0) actSplitKeys(r[idx.cCode]).forEach(a => push(idx.byCode, a, i));
+                if (idx.cPhone >= 0) actSplitPhones(r[idx.cPhone]).forEach(p => push(idx.byPhone, p, i));
+            });
+            return idx;
+        }
+
+        // 找聚合某行对应的活动方行：下单账号 → 查询码 → 手机号 逐级匹配
+        function actFindRow(idx, acctCell, codeCell, phoneCell) {
+            if (!actCmpData) return { row: -1, by: '' };
+            for (const a of actSplitKeys(acctCell)) {
+                const hit = idx.byAcct[a];
+                if (hit && hit.length) return { row: hit[0], by: hit.length > 1 ? '下单账号(活动方重复' + hit.length + '行)' : '下单账号' };
+            }
+            for (const a of actSplitKeys(codeCell)) {
+                const hit = idx.byCode[a];
+                if (hit && hit.length) return { row: hit[0], by: '查询码' };
+            }
+            for (const p of actSplitPhones(phoneCell)) {
+                const hit = idx.byPhone[p];
+                if (hit && hit.length) return { row: hit[0], by: hit.length > 1 ? '手机号(同号' + hit.length + '行)' : '手机号' };
+            }
+            return { row: -1, by: '' };
+        }
+
+        // 对比基准表：网站全流程计算结果（21列）+ 1004基准覆盖（与「导出聚合1004查询表」同一覆盖口径）
+        function actCmpBaseTable() {
+            const baseSheet = exportLaibaoSheet();
+            const aoaBase = XLSX.utils.sheet_to_json(baseSheet, { header: 1, defval: '', raw: false });
+            const headers = (aoaBase[0] || []).map(aggCell);
+            const rows = aoaBase.slice(1).map(r => {
+                const out = (r || []).slice();
+                while (out.length < headers.length) out.push('');
+                return out.slice(0, headers.length);
+            }).filter(r => r.some(c => !aggIsBlank(c)));
+            const h2i = {};
+            headers.forEach((h, i) => { const k = aggColKey(h); if (h2i[k] === undefined) h2i[k] = i; });
+            let overlayCells = 0;
+            const use1004 = !!agg1004Data;
+            if (use1004) {
+                const idx = agg1004Index();
+                const colMap = {};
+                agg1004Data.headers.forEach((h, ci) => {
+                    const key = aggColKey(h);
+                    if (!key) return;
+                    const target = AGG_1004_ALIAS[key] || key;
+                    if (h2i[target] !== undefined) colMap[ci] = h2i[target];
+                });
+                const iAcct = h2i['下单账号'] !== undefined ? h2i['下单账号'] : 1;
+                const iPhone = h2i['收货人手机号'] !== undefined ? h2i['收货人手机号'] : 2;
+                rows.forEach(row => {
+                    const m = aggFind1004Row(idx, row[iAcct], row[iPhone]);
+                    if (m.row < 0) return;
+                    const r1004 = agg1004Data.rows[m.row] || [];
+                    Object.keys(colMap).forEach(ciStr => {
+                        const ci = Number(ciStr);
+                        const nv = r1004[ci];
+                        if (aggIsBlank(nv)) return;
+                        row[colMap[ci]] = nv;
+                        overlayCells++;
+                    });
+                });
+            }
+            return { headers, rows, overlayCells, use1004 };
+        }
+
+        function exportActCmpExcel() {
+            if (!userData || userData.length === 0) {
+                alert('还没有可对比的数据。\n请先上传六份原始订单并点击「开始分析」（按需再上传三张活动表、1004基准表），再上传活动方发货明细。');
+                return;
+            }
+            if (!actCmpData) {
+                alert('请先在本区块上传「活动方发货明细」xlsx，再点导出。');
+                return;
+            }
+            const base = actCmpBaseTable();
+            const headers = base.headers;
+            const rows = base.rows;
+            const h2i = {};
+            headers.forEach((h, i) => { if (h2i[h] === undefined) h2i[h] = i; });
+            const iAcct = h2i['下单账号'] !== undefined ? h2i['下单账号'] : 1;
+            const iCode = h2i['查询码(下单账号)'] !== undefined ? h2i['查询码(下单账号)'] : 0;
+            const iPhone = h2i['收货人手机号'] !== undefined ? h2i['收货人手机号'] : 2;
+            const iDraw = h2i['总抽数'] !== undefined ? h2i['总抽数'] : -1;
+
+            // 列映射：聚合列 ↔ 活动方列（按列名，忽略括号说明）
+            const actHeaders = actCmpData.headers;
+            const aColOf = {};
+            headers.forEach((h, bi) => {
+                const key = aggColKey(h);
+                if (!key) return;
+                const target = ACT_CMP_ALIAS[key] || key;
+                const ai = actHeaders.findIndex(x => aggColKey(x) === target);
+                if (ai >= 0) aColOf[bi] = ai;
+            });
+            // 匹配键不参与内容对比（账号/查询码/手机号本身只用于定位）
+            const KEYCOLS = { '下单账号': 1, '查询码': 1, '收货人手机号': 1 };
+            const cmpBaseCols = Object.keys(aColOf).map(Number).filter(bi => !KEYCOLS[aggColKey(headers[bi])]);
+            const usedActCol = {};
+            cmpBaseCols.forEach(bi => { usedActCol[aColOf[bi]] = true; });
+
+            const idx = actCmpIndex();
+            const diffRows = [];      // 差异逐列明细
+            const acctSum = [];       // 账号级修改明细摘要
+            const onlyPlatform = [];  // 仅平台有
+            const usedActRow = {};
+            let matchGroups = 0, diffAcct = 0;
+
+            rows.forEach(row => {
+                const acct = aggCell(row[iAcct]);
+                const code = aggCell(row[iCode]);
+                const phone = aggCell(row[iPhone]);
+                const m = actFindRow(idx, acct, code, phone);
+                if (m.row < 0) {
+                    onlyPlatform.push([
+                        acct, code, phone,
+                        iDraw >= 0 ? aggCell(row[iDraw]) : '',
+                        '聚合1004查询表有此账号；活动方明细按下单账号／查询码／手机号均未找到'
+                    ]);
+                    return;
+                }
+                matchGroups++;
+                usedActRow[m.row] = true;
+                const aRow = actCmpData.rows[m.row] || [];
+                const hitCols = [], briefs = [];
+                cmpBaseCols.forEach(bi => {
+                    const ai = aColOf[bi];
+                    const av = aRow[ai];
+                    if (aggIsBlank(av)) return;           // 活动方空值/「/」「-」「—」「无」：不覆盖、不计差异
+                    const bv = row[bi];
+                    const kind = actCmpKind(headers[bi], av, bv);
+                    if (actCmpSame(kind, av, bv)) return;
+                    const before = aggCell(bv);
+                    const after = aggCell(av);
+                    hitCols.push(headers[bi]);
+                    briefs.push(headers[bi] + '：' + (before || '空') + ' → ' + after);
+                    diffRows.push([
+                        acct, phone, headers[bi], before, after,
+                        kind === 'num' ? '数值' : (kind === 'flag' ? '是否' : '文本'),
+                        m.by, actCmpData.sheetName
+                    ]);
+                });
+                if (hitCols.length) {
+                    diffAcct++;
+                    acctSum.push([
+                        acct, phone, m.by, hitCols.length,
+                        hitCols.join('、'),
+                        briefs.join('；'),
+                        actCmpData.sheetName
+                    ]);
+                }
+            });
+
+            // 仅活动方有：活动方存在、聚合1004查询表按三键均找不到
+            const onlyAct = [];
+            actCmpData.rows.forEach((r, ri) => {
+                if (usedActRow[ri]) return;
+                const cells = [];
+                for (let ci = 0; ci < actHeaders.length; ci++) cells.push(aggCell(r[ci]));
+                onlyAct.push(['活动方有此账号；聚合1004查询表按下单账号／查询码／手机号均未找到'].concat(cells));
+            });
+
+            const wb = XLSX.utils.book_new();
+            const putSheet = (name, headerRow, dataRows, cols) => {
+                const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+                if (cols) ws['!cols'] = cols;
+                if (headerRow.length && dataRows.length) {
+                    ws['!autofilter'] = {
+                        ref: XLSX.utils.encode_range({
+                            s: { c: 0, r: 0 },
+                            e: { c: headerRow.length - 1, r: Math.max(dataRows.length, 1) }
+                        })
+                    };
+                }
+                XLSX.utils.book_append_sheet(wb, ws, name);
+            };
+
+            const cmpColNames = cmpBaseCols.map(bi => headers[bi]);
+            const actOnlyCols = actHeaders.filter((h, ai) => !usedActCol[ai] && aggColKey(h)).map(h => aggColKey(h));
+            const baseOnlyCols = headers.filter((h, bi) => aColOf[bi] === undefined && aggColKey(h)).map(h => aggColKey(h));
+
+            putSheet('对比摘要', ['项目', '数值／说明'], [
+                ['导出时间', new Date().toLocaleString('zh-CN')],
+                ['对比基准', '聚合1004查询表（网站全流程计算结果' + (base.use1004 ? ' + 已上传1004基准表覆盖后的值，覆盖 ' + base.overlayCells + ' 处' : '，未上传1004基准表') + '）'],
+                ['基准账号行数', rows.length],
+                ['活动方明细文件', actCmpData.fileName + '（工作表 ' + actCmpData.sheetName + '，' + actCmpData.rows.length + ' 行，' + actCmpData.headers.length + ' 列）'],
+                ['匹配到的账号组数', matchGroups],
+                ['存在差异的账号数', diffAcct],
+                ['差异单元格条数（逐列）', diffRows.length],
+                ['仅活动方有（行数）', onlyAct.length],
+                ['仅平台有（行数）', onlyPlatform.length],
+                ['参与对比的列（' + cmpColNames.length + '列）', cmpColNames.join('、') || '无（两侧无同名可对比列）'],
+                ['平台独有列（不参与对比）', baseOnlyCols.join('、') || '无'],
+                ['活动方独有列（不参与对比）', actOnlyCols.join('、') || '无'],
+                ['列名映射（活动方列 → 平台列）', Object.keys(ACT_CMP_ALIAS).map(k => k + ' → ' + ACT_CMP_ALIAS[k]).join('；') || '无'],
+                ['匹配口径', '下单账号 → 查询码 → 收货手机号 逐级匹配；单元格内多个账号／手机号用「；」拆开逐个比'],
+                ['比较口径', '数量类列（含张数/抽数/数量等）按数值比；是否类列（含「是否」或两侧取值均为是/否）按是否比；其余按文本比（忽略多余空格、统一中英文逗号分号）'],
+                ['不覆盖规则', '活动方为空白或「/」「-」「—」「无」时视为不覆盖：保留平台值，且不计入差异'],
+                ['说明', '「账号级修改明细摘要」为一账号一行，列出被改的列与「前 → 后」摘要；「差异逐列明细」逐格列明前后值，可直接定位到列；「仅活动方有」「仅平台有」为两侧未能互相匹配的账号清单']
+            ], [{ wch: 26 }, { wch: 100 }]);
+
+            putSheet('账号级修改明细摘要',
+                ['下单账号', '收货人手机号', '匹配方式', '被修改列数', '被修改的列', '修改摘要（聚合值 → 活动方值）', '活动方工作表'],
+                acctSum,
+                [{ wch: 22 }, { wch: 15 }, { wch: 22 }, { wch: 10 }, { wch: 40 }, { wch: 70 }, { wch: 16 }]);
+
+            putSheet('差异逐列明细',
+                ['下单账号', '收货人手机号', '被对比的列', '聚合1004查询表（平台）', '活动方明细', '对比方式', '匹配方式', '活动方工作表'],
+                diffRows,
+                [{ wch: 22 }, { wch: 15 }, { wch: 18 }, { wch: 40 }, { wch: 40 }, { wch: 10 }, { wch: 22 }, { wch: 16 }]);
+
+            putSheet('仅活动方有',
+                ['说明'].concat(actHeaders),
+                onlyAct,
+                [{ wch: 40 }].concat(actHeaders.map(h => {
+                    const k = aggColKey(h);
+                    if (k === '收货地址' || k === '物品统计') return { wch: 60 };
+                    if (k === '下单账号') return { wch: 22 };
+                    return { wch: 14 };
+                })));
+
+            putSheet('仅平台有',
+                ['下单账号', '查询码(下单账号)', '收货人手机号', '总抽数', '说明'],
+                onlyPlatform,
+                [{ wch: 22 }, { wch: 22 }, { wch: 15 }, { wch: 10 }, { wch: 46 }]);
+
+            XLSX.writeFile(wb, getTimestampFilename('聚合vs活动方明细对比'));
+
+            const st = document.getElementById('actCmpStatus');
+            if (st) {
+                st.textContent = '已导出：基准 ' + rows.length + ' 行，匹配 ' + matchGroups + ' 组；有差异账号 ' + diffAcct + ' 个／差异 ' + diffRows.length + ' 处；仅活动方有 ' + onlyAct.length + ' 行，仅平台有 ' + onlyPlatform.length + ' 行';
+                st.style.color = '#059669';
+            }
+        }
+
+        // 事件绑定（脚本位于 body 末尾，DOM 已就绪）
+        (function initActCmpUI() {
+            const input = document.getElementById('actCmpInput');
+            if (input) input.addEventListener('change', handleActCmpFile);
+            const clr = document.getElementById('actCmpClearBtn');
+            if (clr) clr.addEventListener('click', clearActCmp);
         })();
 
         cloudInit();
